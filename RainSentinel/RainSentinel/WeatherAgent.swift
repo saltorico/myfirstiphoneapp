@@ -6,7 +6,15 @@ import UserNotifications
 @MainActor
 final class WeatherAgent: ObservableObject {
     @Published var locationQuery: String {
-        didSet { saveSettings() }
+        didSet {
+            if isSettingLocationFromSuggestion {
+                isSettingLocationFromSuggestion = false
+            } else {
+                selectedCoordinate = nil
+                locationSuggestions = []
+            }
+            saveSettings()
+        }
     }
     @Published var checkFrequency: CheckFrequency {
         didSet { scheduleTimerIfNeeded(); saveSettings() }
@@ -16,6 +24,7 @@ final class WeatherAgent: ObservableObject {
     }
     @Published private(set) var isPerformingCheck = false
     @Published private(set) var isResolvingLocation = false
+    @Published private(set) var isSearchingLocations = false
     @Published var isAgentActive: Bool {
         didSet { saveSettings() }
     }
@@ -23,6 +32,7 @@ final class WeatherAgent: ObservableObject {
     @Published private(set) var lastChecked: Date?
     @Published private(set) var lastResult: RainResult?
     @Published private(set) var statusMessage: String?
+    @Published private(set) var locationSuggestions: [LocationSuggestion] = []
 
     private var timerCancellable: AnyCancellable?
     private var shouldIgnoreToggleEvent = false
@@ -30,6 +40,8 @@ final class WeatherAgent: ObservableObject {
     private let notificationManager = NotificationManager()
     private let weatherService = WeatherService()
     private let locationFetcher = LocationFetcher()
+    private var selectedCoordinate: CLLocationCoordinate2D?
+    private var isSettingLocationFromSuggestion = false
 
     init() {
         locationQuery = settingsStore.string(forKey: SettingsKey.locationQuery.rawValue) ?? ""
@@ -84,7 +96,9 @@ final class WeatherAgent: ObservableObject {
             let location = try await locationFetcher.currentLocation()
             let placemarks = try await geocode(location: location)
             if let placemark = placemarks.first {
+                isSettingLocationFromSuggestion = true
                 locationQuery = placemark.compactAddress ?? ""
+                selectedCoordinate = placemark.location?.coordinate
                 statusMessage = "Using \(locationQuery)"
             }
         } catch WeatherError.locationNotFound {
@@ -92,6 +106,44 @@ final class WeatherAgent: ObservableObject {
         } catch {
             statusMessage = "Could not resolve current location: \(error.localizedDescription)"
         }
+    }
+
+    func searchLocationMatches() async {
+        let trimmedQuery = locationQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedQuery.isEmpty else {
+            locationSuggestions = []
+            statusMessage = "Enter a location to search for matches."
+            return
+        }
+
+        isSearchingLocations = true
+        defer { isSearchingLocations = false }
+
+        do {
+            locationSuggestions = []
+            let placemarks = try await geocode(query: trimmedQuery)
+            let suggestions = placemarks.compactMap(LocationSuggestion.init)
+            locationSuggestions = suggestions
+            if suggestions.isEmpty {
+                statusMessage = "No matching locations found."
+            } else {
+                statusMessage = "Select a location below."
+            }
+        } catch WeatherError.locationNotFound {
+            locationSuggestions = []
+            statusMessage = "Could not find any locations matching that search."
+        } catch {
+            locationSuggestions = []
+            statusMessage = "Location lookup failed: \(error.localizedDescription)"
+        }
+    }
+
+    func selectSuggestion(_ suggestion: LocationSuggestion) {
+        isSettingLocationFromSuggestion = true
+        locationQuery = suggestion.displayName
+        selectedCoordinate = suggestion.coordinate
+        locationSuggestions = []
+        statusMessage = "Using \(suggestion.displayName)"
     }
 
     func dismissSchedule() {
@@ -111,12 +163,24 @@ final class WeatherAgent: ObservableObject {
     }
 
     private func coordinates(for query: String) async throws -> CLLocationCoordinate2D {
+        if let selectedCoordinate, query == locationQuery {
+            return selectedCoordinate
+        }
+
+        let placemarks = try await geocode(query: query)
+        guard let coordinate = placemarks.first?.location?.coordinate else {
+            throw WeatherError.locationNotFound
+        }
+        return coordinate
+    }
+
+    private func geocode(query: String) async throws -> [CLPlacemark] {
         try await withCheckedThrowingContinuation { continuation in
             CLGeocoder().geocodeAddressString(query) { placemarks, error in
                 if let error {
                     continuation.resume(throwing: error)
-                } else if let coordinate = placemarks?.first?.location?.coordinate {
-                    continuation.resume(returning: coordinate)
+                } else if let placemarks, !placemarks.isEmpty {
+                    continuation.resume(returning: placemarks)
                 } else {
                     continuation.resume(throwing: WeatherError.locationNotFound)
                 }
@@ -204,6 +268,50 @@ final class WeatherAgent: ObservableObject {
         case notifyEveryCheck
     }
 
+}
+
+extension WeatherAgent {
+    struct LocationSuggestion: Identifiable {
+        let id = UUID()
+        let title: String
+        let subtitle: String?
+        let coordinate: CLLocationCoordinate2D
+
+        init?(placemark: CLPlacemark) {
+            guard let coordinate = placemark.location?.coordinate else { return nil }
+            self.coordinate = coordinate
+
+            if let locality = placemark.locality {
+                title = locality
+                if let administrativeArea = placemark.administrativeArea, let country = placemark.country {
+                    subtitle = "\(administrativeArea), \(country)"
+                } else if let administrativeArea = placemark.administrativeArea {
+                    subtitle = administrativeArea
+                } else {
+                    subtitle = placemark.country
+                }
+            } else if let name = placemark.name {
+                title = name
+                let address = placemark.compactAddress
+                subtitle = address == name ? nil : address
+            } else if let address = placemark.compactAddress {
+                title = address
+                subtitle = nil
+            } else {
+                return nil
+            }
+        }
+
+        var displayName: String {
+            if let subtitle, !subtitle.isEmpty {
+                if subtitle.contains(title) {
+                    return subtitle
+                }
+                return "\(title), \(subtitle)"
+            }
+            return title
+        }
+    }
 }
 
 extension WeatherAgent {

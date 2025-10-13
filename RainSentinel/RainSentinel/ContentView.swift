@@ -12,14 +12,41 @@ struct ContentView: View {
                         .textInputAutocapitalization(.words)
                         .disableAutocorrection(true)
                         .submitLabel(.done)
+                        .onSubmit {
+                            Task { await agent.searchLocationMatches() }
+                        }
                     Button("Use Current Location") {
                         Task {
                             await agent.useCurrentLocation()
                         }
                     }
                     .disabled(agent.isResolvingLocation)
+                    Button {
+                        Task { await agent.searchLocationMatches() }
+                    } label: {
+                        Label("Find Matches", systemImage: "magnifyingglass")
+                    }
+                    .disabled(agent.isSearchingLocations || agent.locationQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     if agent.isResolvingLocation {
                         ProgressView("Resolving…")
+                    } else if agent.isSearchingLocations {
+                        ProgressView("Searching…")
+                    }
+                    if !agent.locationSuggestions.isEmpty {
+                        ForEach(agent.locationSuggestions) { suggestion in
+                            Button {
+                                agent.selectSuggestion(suggestion)
+                            } label: {
+                                VStack(alignment: .leading) {
+                                    Text(suggestion.title)
+                                    if let subtitle = suggestion.subtitle {
+                                        Text(subtitle)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
