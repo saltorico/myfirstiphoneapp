@@ -15,6 +15,7 @@ final class WeatherAgent: ObservableObject {
             }
             lastResolvedCoordinate = nil
             providerLinkURL = nil
+            lastForecast = nil
             saveSettings()
         }
     }
@@ -42,6 +43,7 @@ final class WeatherAgent: ObservableObject {
     @Published private(set) var lastChecked: Date?
     @Published private(set) var lastResult: RainResult?
     @Published private(set) var statusMessage: String?
+    @Published private(set) var lastForecast: RainForecast?
     @Published private(set) var locationSuggestions: [LocationSuggestion] = []
     @Published private(set) var providerLinkURL: URL?
 
@@ -212,6 +214,7 @@ final class WeatherAgent: ObservableObject {
         isPerformingCheck = true
         statusMessage = reason == .manual ? "Checking now…" : "Scheduled check running…"
         providerLinkURL = nil
+        lastForecast = nil
         do {
             let coordinate = try await coordinates(for: locationQuery)
             lastResolvedCoordinate = coordinate
@@ -230,6 +233,7 @@ final class WeatherAgent: ObservableObject {
     private func handleForecast(_ forecast: RainForecast, reason: CheckReason) {
         let result = RainResult(forecast: forecast)
         lastResult = result
+        lastForecast = forecast
 
         if result.isRainLikely {
             let body = "Rain is expected around \(result.likelyTime.formatted(date: .omitted, time: .shortened))."
@@ -340,6 +344,14 @@ extension WeatherAgent {
         agent.locationQuery = "Seattle, WA"
         agent.lastChecked = Date()
         agent.lastResult = RainResult.mock
+        let now = Date()
+        let calendar = Calendar.current
+        let points = (0..<6).compactMap { offset -> RainForecast.DataPoint? in
+            guard let date = calendar.date(byAdding: .hour, value: offset, to: now) else { return nil }
+            let probability = min(100, Double(20 + offset * 10))
+            return RainForecast.DataPoint(date: date, probability: probability, rainfallAmount: Double(offset) * 0.1)
+        }
+        agent.lastForecast = RainForecast(points: points, timezone: .current, lookaheadHours: 12)
         agent.statusMessage = "Preview data"
         return agent
     }
