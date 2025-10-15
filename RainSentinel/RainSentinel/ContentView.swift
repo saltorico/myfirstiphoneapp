@@ -113,11 +113,11 @@ struct ContentView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
-                    if let forecast = agent.lastForecast, !forecast.points.isEmpty {
+                    if let forecast = agent.lastForecast, !forecast.next24HourPoints.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("Hourly precipitation chance")
+                            Text("Next 24 hours precipitation chance")
                                 .font(.headline)
-                            ForEach(forecast.points) { point in
+                            ForEach(forecast.next24HourPoints) { point in
                                 HStack {
                                     Text(point.date, format: .dateTime.hour().minute())
                                     Spacer()
