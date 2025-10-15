@@ -50,7 +50,7 @@ struct ContentView: View {
                     }
                 }
 
-                Section(header: Text("Agent")) {
+                Section(header: Text("Agent"), footer: Text("Open-Meteo provides worldwide coverage for these hourly rain predictions.")) {
                     Toggle(isOn: $agent.isAgentActive) {
                         Text(agent.isAgentActive ? "Rain agent enabled" : "Enable rain agent")
                     }
@@ -59,6 +59,13 @@ struct ContentView: View {
                             await agent.handleToggleChange(isEnabled: isOn)
                         }
                     }
+
+                    Picker("Look ahead", selection: $agent.lookaheadWindow) {
+                        ForEach(RainLookahead.allCases) { window in
+                            Text(window.description).tag(window)
+                        }
+                    }
+                    .pickerStyle(.segmented)
 
                     Button(action: {
                         Task { await agent.performManualCheck() }
@@ -94,6 +101,12 @@ struct ContentView: View {
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
+                    }
+                    if let linkURL = agent.providerLinkURL {
+                        Link(destination: linkURL) {
+                            Label("View this outlook on Open-Meteo", systemImage: "arrow.up.forward.app")
+                        }
+                        .font(.footnote)
                     }
                     if let message = agent.statusMessage {
                         Text(message)

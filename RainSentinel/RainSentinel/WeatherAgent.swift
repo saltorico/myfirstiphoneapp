@@ -13,6 +13,8 @@ final class WeatherAgent: ObservableObject {
                 selectedCoordinate = nil
                 locationSuggestions = []
             }
+            lastResolvedCoordinate = nil
+            providerLinkURL = nil
             saveSettings()
         }
     }
@@ -21,6 +23,14 @@ final class WeatherAgent: ObservableObject {
     }
     @Published var notifyOnEveryCheck: Bool {
         didSet { saveSettings() }
+    }
+    @Published var lookaheadWindow: RainLookahead {
+        didSet {
+            saveSettings()
+            if let coordinate = lastResolvedCoordinate {
+                providerLinkURL = weatherService.forecastLink(for: coordinate, lookahead: lookaheadWindow)
+            }
+        }
     }
     @Published private(set) var isPerformingCheck = false
     @Published private(set) var isResolvingLocation = false
@@ -33,6 +43,7 @@ final class WeatherAgent: ObservableObject {
     @Published private(set) var lastResult: RainResult?
     @Published private(set) var statusMessage: String?
     @Published private(set) var locationSuggestions: [LocationSuggestion] = []
+    @Published private(set) var providerLinkURL: URL?
 
     private var timerCancellable: AnyCancellable?
     private var shouldIgnoreToggleEvent = false
@@ -42,11 +53,13 @@ final class WeatherAgent: ObservableObject {
     private let locationFetcher = LocationFetcher()
     private var selectedCoordinate: CLLocationCoordinate2D?
     private var isSettingLocationFromSuggestion = false
+    private var lastResolvedCoordinate: CLLocationCoordinate2D?
 
     init() {
         locationQuery = settingsStore.string(forKey: SettingsKey.locationQuery.rawValue) ?? ""
         checkFrequency = CheckFrequency(rawValue: settingsStore.integer(forKey: SettingsKey.frequency.rawValue)) ?? .everyHour
         notifyOnEveryCheck = settingsStore.bool(forKey: SettingsKey.notifyEveryCheck.rawValue)
+        lookaheadWindow = RainLookahead(rawValue: settingsStore.integer(forKey: SettingsKey.lookahead.rawValue)) ?? .twelveHours
         isAgentActive = settingsStore.bool(forKey: SettingsKey.agentActive.rawValue)
 
         if isAgentActive {
@@ -198,9 +211,11 @@ final class WeatherAgent: ObservableObject {
 
         isPerformingCheck = true
         statusMessage = reason == .manual ? "Checking now…" : "Scheduled check running…"
+        providerLinkURL = nil
         do {
             let coordinate = try await coordinates(for: locationQuery)
-            let forecast = try await weatherService.fetchForecast(for: coordinate)
+            lastResolvedCoordinate = coordinate
+            let forecast = try await weatherService.fetchForecast(for: coordinate, lookahead: lookaheadWindow)
             handleForecast(forecast, reason: reason)
         } catch WeatherError.locationNotFound {
             statusMessage = "Could not resolve that location. Please refine your search."
@@ -224,6 +239,9 @@ final class WeatherAgent: ObservableObject {
         }
 
         statusMessage = result.summary
+        if let coordinate = lastResolvedCoordinate {
+            providerLinkURL = weatherService.forecastLink(for: coordinate, lookahead: lookaheadWindow)
+        }
     }
 
     private func scheduleTimerIfNeeded() {
@@ -249,6 +267,7 @@ final class WeatherAgent: ObservableObject {
         settingsStore.set(checkFrequency.rawValue, forKey: SettingsKey.frequency.rawValue)
         settingsStore.set(isAgentActive, forKey: SettingsKey.agentActive.rawValue)
         settingsStore.set(notifyOnEveryCheck, forKey: SettingsKey.notifyEveryCheck.rawValue)
+        settingsStore.set(lookaheadWindow.rawValue, forKey: SettingsKey.lookahead.rawValue)
     }
 
     private func revertToggle() {
@@ -266,6 +285,7 @@ final class WeatherAgent: ObservableObject {
         case frequency
         case agentActive
         case notifyEveryCheck
+        case lookahead
     }
 
 }
