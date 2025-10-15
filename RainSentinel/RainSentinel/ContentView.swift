@@ -113,6 +113,25 @@ struct ContentView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
+                    if let forecast = agent.lastForecast, !forecast.points.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Hourly precipitation chance")
+                                .font(.headline)
+                            ForEach(forecast.points) { point in
+                                HStack {
+                                    Text(point.date, format: .dateTime.hour().minute())
+                                    Spacer()
+                                    Text("\(Int(point.probability.rounded()))%")
+                                        .monospacedDigit()
+                                        .fontWeight(.semibold)
+                                }
+                            }
+                            Text("Times shown in \(forecast.timezone.localizedName(for: .shortGeneric, locale: .current) ?? forecast.timezone.identifier)")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.top, 8)
+                    }
                 }
             }
             .navigationTitle("Rain Sentinel")
