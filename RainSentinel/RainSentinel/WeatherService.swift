@@ -11,6 +11,7 @@ struct RainForecast {
 
     let points: [DataPoint]
     let timezone: TimeZone
+    let lookaheadHours: Int
 
     var upcomingRainPoint: DataPoint? {
         points.first { $0.probability >= 60 || $0.rainfallAmount > 0.1 }
@@ -18,10 +19,6 @@ struct RainForecast {
 
     var highestProbabilityPoint: DataPoint? {
         points.max(by: { $0.probability < $1.probability })
-    }
-
-    var lookaheadHours: Int {
-        max(points.count, 1)
     }
 }
 
@@ -84,8 +81,8 @@ final class WeatherService {
         decoder.dateDecodingStrategy = .iso8601
     }
 
-    func fetchForecast(for coordinate: CLLocationCoordinate2D) async throws -> RainForecast {
-        let url = try url(for: coordinate)
+    func fetchForecast(for coordinate: CLLocationCoordinate2D, lookahead: RainLookahead) async throws -> RainForecast {
+        let url = try url(for: coordinate, lookahead: lookahead)
         let (data, response) = try await URLSession.shared.data(from: url)
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             throw WeatherError.decodingFailed
@@ -109,16 +106,39 @@ final class WeatherService {
             return RainForecast.DataPoint(date: date, probability: probability, rainfallAmount: rainfall)
         }
 
-        return RainForecast(points: points, timezone: timezone)
+        let now = Date()
+        let horizon = now.addingTimeInterval(TimeInterval(lookahead.rawValue * 3600))
+        let filteredPoints = points.filter { dataPoint in
+            dataPoint.date >= now && dataPoint.date <= horizon
+        }
+
+        let consideredPoints: [RainForecast.DataPoint]
+        if filteredPoints.isEmpty {
+            consideredPoints = Array(points.prefix(lookahead.rawValue))
+        } else {
+            consideredPoints = filteredPoints
+        }
+
+        return RainForecast(points: consideredPoints, timezone: timezone, lookaheadHours: lookahead.rawValue)
     }
 
-    private func url(for coordinate: CLLocationCoordinate2D) throws -> URL {
+    func forecastLink(for coordinate: CLLocationCoordinate2D, lookahead: RainLookahead) -> URL? {
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "open-meteo.com"
+        components.path = "/en/docs"
+        let fragment = "latitude=\(String(format: "%.4f", coordinate.latitude))&longitude=\(String(format: "%.4f", coordinate.longitude))&hourly=precipitation_probability,rain&forecast_days=\(lookahead.forecastDays)"
+        components.fragment = fragment
+        return components.url
+    }
+
+    private func url(for coordinate: CLLocationCoordinate2D, lookahead: RainLookahead) throws -> URL {
         var components = URLComponents(string: "https://api.open-meteo.com/v1/forecast")
         components?.queryItems = [
             URLQueryItem(name: "latitude", value: String(format: "%.4f", coordinate.latitude)),
             URLQueryItem(name: "longitude", value: String(format: "%.4f", coordinate.longitude)),
             URLQueryItem(name: "hourly", value: "precipitation_probability,rain"),
-            URLQueryItem(name: "forecast_days", value: "1"),
+            URLQueryItem(name: "forecast_days", value: String(lookahead.forecastDays)),
             URLQueryItem(name: "timezone", value: "auto")
         ]
         guard let url = components?.url else { throw WeatherError.decodingFailed }
