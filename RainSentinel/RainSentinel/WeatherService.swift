@@ -14,6 +14,7 @@ struct RainForecast {
     let allPoints: [DataPoint]
     let timezone: TimeZone
     let lookaheadHours: Int
+    let rawResponseJSON: String?
 
     enum DetectionWindow {
         case lookahead
@@ -31,11 +32,11 @@ struct RainForecast {
     }
 
     var upcomingRainPoint: DataPoint? {
-        points.first { $0.probability >= 50 || $0.rainfallAmount > 0.1 }
+        firstDataPoint { $0.probability >= 50 || $0.rainfallAmount > 0.1 }
     }
 
     var moderateRainPoint: DataPoint? {
-        points.first { $0.probability >= 20 || $0.rainfallAmount > 0.05 }
+        firstDataPoint { $0.probability >= 20 || $0.rainfallAmount > 0.05 }
     }
 
     var highestProbabilityPoint: DataPoint? {
@@ -185,6 +186,7 @@ final class WeatherService {
         }
 
         let decoded = try decoder.decode(OpenMeteoResponse.self, from: data)
+        let rawJSON = String(data: data, encoding: .utf8)
         guard let timezone = TimeZone(identifier: decoded.timezone) ?? TimeZone(secondsFromGMT: decoded.utcOffsetSeconds) else {
             throw WeatherError.decodingFailed
         }
@@ -231,7 +233,8 @@ final class WeatherService {
                              next24HourPoints: next24Points,
                              allPoints: allPoints,
                              timezone: timezone,
-                             lookaheadHours: lookahead.rawValue)
+                             lookaheadHours: lookahead.rawValue,
+                             rawResponseJSON: rawJSON)
     }
 
     func forecastLink(for coordinate: CLLocationCoordinate2D, lookahead: RainLookahead) -> URL? {
