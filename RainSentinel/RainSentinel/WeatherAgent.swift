@@ -46,6 +46,7 @@ final class WeatherAgent: ObservableObject {
     @Published private(set) var lastForecast: RainForecast?
     @Published private(set) var locationSuggestions: [LocationSuggestion] = []
     @Published private(set) var providerLinkURL: URL?
+    @Published private(set) var lastResolvedCoordinate: CLLocationCoordinate2D?
 
     private var timerCancellable: AnyCancellable?
     private var shouldIgnoreToggleEvent = false
@@ -55,7 +56,6 @@ final class WeatherAgent: ObservableObject {
     private let locationFetcher = LocationFetcher()
     private var selectedCoordinate: CLLocationCoordinate2D?
     private var isSettingLocationFromSuggestion = false
-    private var lastResolvedCoordinate: CLLocationCoordinate2D?
 
     init() {
         locationQuery = settingsStore.string(forKey: SettingsKey.locationQuery.rawValue) ?? ""
@@ -243,7 +243,9 @@ final class WeatherAgent: ObservableObject {
         }
 
         statusMessage = result.summary
-        if let coordinate = lastResolvedCoordinate {
+        if let requestURL = weatherService.lastRequestURL {
+            providerLinkURL = requestURL
+        } else if let coordinate = lastResolvedCoordinate {
             providerLinkURL = weatherService.forecastLink(for: coordinate, lookahead: lookaheadWindow)
         }
     }
@@ -358,6 +360,7 @@ extension WeatherAgent {
                                           timezone: .current,
                                           lookaheadHours: 12)
         agent.statusMessage = "Preview data"
+        agent.lastResolvedCoordinate = CLLocationCoordinate2D(latitude: 47.6062, longitude: -122.3321)
         return agent
     }
 }
