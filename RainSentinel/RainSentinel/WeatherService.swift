@@ -11,6 +11,7 @@ struct RainForecast {
 
     let points: [DataPoint]
     let next24HourPoints: [DataPoint]
+    let allPoints: [DataPoint]
     let timezone: TimeZone
     let lookaheadHours: Int
 
@@ -218,6 +219,7 @@ final class WeatherService {
 
         return RainForecast(points: consideredPoints,
                              next24HourPoints: next24Points,
+                             allPoints: allPoints,
                              timezone: timezone,
                              lookaheadHours: lookahead.rawValue)
     }
