@@ -155,6 +155,57 @@ struct ContentView: View {
     }
 }
 
+private struct HourlyProbabilityRow: View {
+    let point: RainForecast.DataPoint
+    let timezone: TimeZone
+
+    private var timeFormatter: Date.FormatStyle {
+        Date.FormatStyle(date: .omitted, time: .shortened).timeZone(timezone)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(point.date.formatted(timeFormatter))
+                    .font(.subheadline)
+                Spacer()
+                Text("\(Int(point.probability.rounded()))%")
+                    .monospacedDigit()
+                    .fontWeight(.semibold)
+            }
+            ProbabilityBar(probability: point.probability)
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+private struct ProbabilityBar: View {
+    let probability: Double
+
+    private var barColors: [Color] {
+        if probability >= 70 {
+            return [Color.blue, Color.purple]
+        } else if probability >= 40 {
+            return [Color.cyan, Color.blue]
+        } else {
+            return [Color.teal.opacity(0.6), Color.cyan.opacity(0.8)]
+        }
+    }
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(Color.secondary.opacity(0.15))
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(LinearGradient(colors: barColors, startPoint: .leading, endPoint: .trailing))
+                    .frame(width: max(4, geometry.size.width * CGFloat(probability / 100.0)))
+            }
+        }
+        .frame(height: 8)
+    }
+}
+
 struct ScheduleView: View {
     @EnvironmentObject private var agent: WeatherAgent
     @Environment(\.dismiss) private var dismiss

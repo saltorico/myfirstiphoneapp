@@ -14,6 +14,21 @@ struct RainForecast {
     let timezone: TimeZone
     let lookaheadHours: Int
 
+    enum DetectionWindow {
+        case lookahead
+        case next24Hours
+        case extended
+    }
+
+    private func firstDataPoint(where predicate: (DataPoint) -> Bool) -> DataPoint? {
+        for series in [points, next24HourPoints, allPoints] {
+            if let match = series.first(where: predicate) {
+                return match
+            }
+        }
+        return nil
+    }
+
     var upcomingRainPoint: DataPoint? {
         points.first { $0.probability >= 50 || $0.rainfallAmount > 0.1 }
     }
@@ -23,7 +38,18 @@ struct RainForecast {
     }
 
     var highestProbabilityPoint: DataPoint? {
-        points.max(by: { $0.probability < $1.probability })
+        (allPoints.isEmpty ? (next24HourPoints.isEmpty ? points : next24HourPoints) : allPoints)
+            .max(by: { $0.probability < $1.probability })
+    }
+
+    func detectionWindow(for point: DataPoint) -> DetectionWindow {
+        if points.contains(where: { $0.id == point.id }) {
+            return .lookahead
+        }
+        if next24HourPoints.contains(where: { $0.id == point.id }) {
+            return .next24Hours
+        }
+        return .extended
     }
 }
 
@@ -35,6 +61,9 @@ struct RainResult {
     let iconName: String
 
     init(forecast: RainForecast) {
+        let shortTimeFormatter = Date.FormatStyle(date: .omitted, time: .shortened).timeZone(forecast.timezone)
+        let dayTimeFormatter = Date.FormatStyle(date: .abbreviated, time: .shortened).timeZone(forecast.timezone)
+
         if let rainPoint = forecast.upcomingRainPoint {
             isRainLikely = true
             likelyTime = rainPoint.date
@@ -80,6 +109,47 @@ struct RainResult {
         self.details = details
         self.likelyTime = likelyTime
         self.iconName = iconName
+    }
+
+    private static func summaryText(leadIn: String,
+                                    point: RainForecast.DataPoint,
+                                    probability: Double,
+                                    detectionWindow: RainForecast.DetectionWindow,
+                                    lookaheadHours: Int,
+                                    shortTimeFormatter: Date.FormatStyle,
+                                    dayTimeFormatter: Date.FormatStyle) -> String {
+        let probabilityValue = Int(probability.rounded())
+        switch detectionWindow {
+        case .lookahead:
+            return "\(leadIn) around \(point.date.formatted(shortTimeFormatter)) with a \(probabilityValue)% chance."
+        case .next24Hours:
+            return "\(leadIn) later around \(point.date.formatted(shortTimeFormatter)) with a \(probabilityValue)% chance (outside the next \(lookaheadHours) hours)."
+        case .extended:
+            return "\(leadIn) on \(point.date.formatted(dayTimeFormatter)) with a \(probabilityValue)% chance."
+        }
+    }
+
+    private static func detailText(for forecast: RainForecast,
+                                   shortTimeFormatter: Date.FormatStyle,
+                                   dayTimeFormatter: Date.FormatStyle) -> String? {
+        guard let maxPoint = forecast.highestProbabilityPoint else { return nil }
+        let detectionWindow = forecast.detectionWindow(for: maxPoint)
+        let formatter = detectionWindow == .extended ? dayTimeFormatter : shortTimeFormatter
+        let prefix = detectionWindow == .extended ? "on" : "around"
+        let windowDescription = windowDescription(for: detectionWindow, lookaheadHours: forecast.lookaheadHours)
+        return "Peak chance reaches \(Int(maxPoint.probability.rounded()))% \(prefix) \(maxPoint.date.formatted(formatter)) \(windowDescription)."
+    }
+
+    private static func windowDescription(for detectionWindow: RainForecast.DetectionWindow,
+                                          lookaheadHours: Int) -> String {
+        switch detectionWindow {
+        case .lookahead:
+            return "within the next \(lookaheadHours) hours"
+        case .next24Hours:
+            return "within the next 24 hours"
+        case .extended:
+            return "later in the forecast"
+        }
     }
 }
 
