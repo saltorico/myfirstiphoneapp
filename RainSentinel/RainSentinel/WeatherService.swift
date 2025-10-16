@@ -62,13 +62,21 @@ struct RainResult {
     let iconName: String
 
     init(forecast: RainForecast) {
-        let shortTimeFormatter = Date.FormatStyle(date: .omitted, time: .shortened).timeZone(forecast.timezone)
-        let dayTimeFormatter = Date.FormatStyle(date: .abbreviated, time: .shortened).timeZone(forecast.timezone)
+        let shortTimeFormatter = Date.FormatStyle(date: .omitted,
+                                                  time: .shortened,
+                                                  locale: Locale.current,
+                                                  calendar: Calendar.current,
+                                                  timeZone: forecast.timezone)
+        let dayTimeFormatter = Date.FormatStyle(date: .abbreviated,
+                                                time: .shortened,
+                                                locale: Locale.current,
+                                                calendar: Calendar.current,
+                                                timeZone: forecast.timezone)
 
         if let rainPoint = forecast.upcomingRainPoint {
             isRainLikely = true
             likelyTime = rainPoint.date
-            summary = "Rain likely around \(rainPoint.date.formatted(date: .omitted, time: .shortened)) with a \(Int(rainPoint.probability.rounded()))% chance."
+            summary = "Rain likely around \(rainPoint.date.formatted(shortTimeFormatter)) with a \(Int(rainPoint.probability.rounded()))% chance."
             if let maxPoint = forecast.highestProbabilityPoint {
                 details = "Peak chance reaches \(Int(maxPoint.probability.rounded()))% during the forecast window."
             } else {
@@ -78,7 +86,7 @@ struct RainResult {
         } else if let moderatePoint = forecast.moderateRainPoint {
             isRainLikely = false
             likelyTime = moderatePoint.date
-            summary = "Showers possible around \(moderatePoint.date.formatted(date: .omitted, time: .shortened)) with a \(Int(moderatePoint.probability.rounded()))% chance."
+            summary = "Showers possible around \(moderatePoint.date.formatted(shortTimeFormatter)) with a \(Int(moderatePoint.probability.rounded()))% chance."
             if let maxPoint = forecast.highestProbabilityPoint {
                 details = "Peak chance reaches \(Int(maxPoint.probability.rounded()))% within the next \(forecast.lookaheadHours) hours."
             } else {
