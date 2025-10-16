@@ -160,7 +160,11 @@ private struct HourlyProbabilityRow: View {
     let timezone: TimeZone
 
     private var timeFormatter: Date.FormatStyle {
-        Date.FormatStyle(date: .omitted, time: .shortened).timeZone(timezone)
+        Date.FormatStyle(date: .omitted,
+                         time: .shortened,
+                         locale: Locale.current,
+                         calendar: Calendar.current,
+                         timeZone: timezone)
     }
 
     var body: some View {
