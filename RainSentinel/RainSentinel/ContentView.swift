@@ -114,12 +114,35 @@ struct ContentView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
-                    if let forecast = agent.lastForecast, !forecast.next24HourPoints.isEmpty {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("Next 24 hours precipitation chance")
-                                .font(.headline)
-                            ForecastTable(points: forecast.next24HourPoints, timezone: forecast.timezone)
+                    if let forecast = agent.lastForecast {
+                        VStack(alignment: .leading, spacing: 16) {
                             ForecastMetadataView(timezone: forecast.timezone, coordinate: agent.lastResolvedCoordinate)
+                                .padding(.top, 4)
+
+                            if !forecast.points.isEmpty {
+                                ForecastDisclosure(title: "Look ahead (next \(forecast.lookaheadHours) hours)",
+                                                   points: forecast.points,
+                                                   timezone: forecast.timezone,
+                                                   initiallyExpanded: true)
+                            }
+
+                            if !forecast.next24HourPoints.isEmpty {
+                                ForecastDisclosure(title: "Next 24 hours precipitation chance",
+                                                   points: forecast.next24HourPoints,
+                                                   timezone: forecast.timezone,
+                                                   initiallyExpanded: forecast.lookaheadHours >= 24)
+                            }
+
+                            if forecast.allPoints.count > forecast.next24HourPoints.count {
+                                ForecastDisclosure(title: "Full hourly forecast",
+                                                   points: forecast.allPoints,
+                                                   timezone: forecast.timezone,
+                                                   initiallyExpanded: false)
+                            }
+
+                            if let rawJSON = forecast.rawResponseJSON {
+                                RawResponseDisclosure(rawJSON: rawJSON)
+                            }
                         }
                         .padding(.top, 8)
                     }
@@ -160,14 +183,19 @@ private struct ForecastTable: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
+            HStack(spacing: 12) {
                 Text("Time")
                     .font(.subheadline.weight(.semibold))
                     .textCase(.uppercase)
-                Spacer()
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 Text("Chance")
                     .font(.subheadline.weight(.semibold))
                     .textCase(.uppercase)
+                    .frame(width: 70, alignment: .trailing)
+                Text("Rain")
+                    .font(.subheadline.weight(.semibold))
+                    .textCase(.uppercase)
+                    .frame(width: 70, alignment: .trailing)
             }
             .padding(.vertical, 6)
             .padding(.horizontal, 12)
@@ -191,13 +219,17 @@ private struct ForecastTableRow: View {
     let timeFormatter: Date.FormatStyle
 
     var body: some View {
-        HStack {
+        HStack(spacing: 12) {
             Text(point.date.formatted(timeFormatter))
                 .font(.body.monospacedDigit())
-            Spacer()
+                .frame(maxWidth: .infinity, alignment: .leading)
             Text("\(Int(point.probability.rounded()))%")
                 .font(.body.monospacedDigit())
                 .fontWeight(.semibold)
+                .frame(width: 70, alignment: .trailing)
+            Text(String(format: "%.2f", point.rainfallAmount))
+                .font(.body.monospacedDigit())
+                .frame(width: 70, alignment: .trailing)
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 12)
@@ -219,6 +251,60 @@ private struct ForecastMetadataView: View {
             Text("Times shown in \(timezone.localizedName(for: .shortGeneric, locale: .current) ?? timezone.identifier)")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct ForecastDisclosure: View {
+    let title: String
+    let points: [RainForecast.DataPoint]
+    let timezone: TimeZone
+    @State private var isExpanded: Bool
+
+    init(title: String, points: [RainForecast.DataPoint], timezone: TimeZone, initiallyExpanded: Bool) {
+        self.title = title
+        self.points = points
+        self.timezone = timezone
+        _isExpanded = State(initialValue: initiallyExpanded)
+    }
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $isExpanded) {
+            if points.count > 24 {
+                ScrollView(.vertical) {
+                    ForecastTable(points: points, timezone: timezone)
+                }
+                .frame(maxHeight: 320)
+                .padding(.top, 8)
+            } else {
+                ForecastTable(points: points, timezone: timezone)
+                    .padding(.top, 8)
+            }
+        } label: {
+            Text(title)
+                .font(.headline)
+        }
+    }
+}
+
+private struct RawResponseDisclosure: View {
+    let rawJSON: String
+    @State private var isExpanded = false
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $isExpanded) {
+            ScrollView(.vertical) {
+                Text(rawJSON)
+                    .font(.system(.footnote, design: .monospaced))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 4)
+                    .textSelection(.enabled)
+            }
+            .frame(maxHeight: 240)
+            .padding(.top, 8)
+        } label: {
+            Text("Raw API response")
+                .font(.headline)
         }
     }
 }

@@ -358,7 +358,8 @@ extension WeatherAgent {
                                           next24HourPoints: next24,
                                           allPoints: next24,
                                           timezone: .current,
-                                          lookaheadHours: 12)
+                                          lookaheadHours: 12,
+                                          rawResponseJSON: nil)
         agent.statusMessage = "Preview data"
         agent.lastResolvedCoordinate = CLLocationCoordinate2D(latitude: 47.6062, longitude: -122.3321)
         return agent
