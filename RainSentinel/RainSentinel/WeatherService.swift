@@ -169,6 +169,7 @@ enum WeatherError: Error {
 
 final class WeatherService {
     private let decoder: JSONDecoder
+    private(set) var lastRequestURL: URL?
 
     init() {
         decoder = JSONDecoder()
@@ -177,6 +178,7 @@ final class WeatherService {
 
     func fetchForecast(for coordinate: CLLocationCoordinate2D, lookahead: RainLookahead) async throws -> RainForecast {
         let url = try url(for: coordinate, lookahead: lookahead)
+        lastRequestURL = url
         let (data, response) = try await URLSession.shared.data(from: url)
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             throw WeatherError.decodingFailed
@@ -233,13 +235,7 @@ final class WeatherService {
     }
 
     func forecastLink(for coordinate: CLLocationCoordinate2D, lookahead: RainLookahead) -> URL? {
-        var components = URLComponents()
-        components.scheme = "https"
-        components.host = "open-meteo.com"
-        components.path = "/en/docs"
-        let fragment = "latitude=\(String(format: "%.4f", coordinate.latitude))&longitude=\(String(format: "%.4f", coordinate.longitude))&hourly=precipitation_probability,rain&forecast_days=\(lookahead.forecastDays)"
-        components.fragment = fragment
-        return components.url
+        return try? url(for: coordinate, lookahead: lookahead)
     }
 
     private func url(for coordinate: CLLocationCoordinate2D, lookahead: RainLookahead) throws -> URL {

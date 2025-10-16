@@ -1,3 +1,4 @@
+import CoreLocation
 import SwiftUI
 
 struct ContentView: View {
@@ -104,7 +105,7 @@ struct ContentView: View {
                     }
                     if let linkURL = agent.providerLinkURL {
                         Link(destination: linkURL) {
-                            Label("View this outlook on Open-Meteo", systemImage: "arrow.up.forward.app")
+                            Label("Open hourly precipitation API", systemImage: "arrow.up.forward.app")
                         }
                         .font(.footnote)
                     }
@@ -114,21 +115,11 @@ struct ContentView: View {
                             .foregroundStyle(.secondary)
                     }
                     if let forecast = agent.lastForecast, !forecast.next24HourPoints.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: 12) {
                             Text("Next 24 hours precipitation chance")
                                 .font(.headline)
-                            ForEach(forecast.next24HourPoints) { point in
-                                HStack {
-                                    Text(point.date, format: .dateTime.hour().minute())
-                                    Spacer()
-                                    Text("\(Int(point.probability.rounded()))%")
-                                        .monospacedDigit()
-                                        .fontWeight(.semibold)
-                                }
-                            }
-                            Text("Times shown in \(forecast.timezone.localizedName(for: .shortGeneric, locale: .current) ?? forecast.timezone.identifier)")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
+                            ForecastTable(points: forecast.next24HourPoints, timezone: forecast.timezone)
+                            ForecastMetadataView(timezone: forecast.timezone, coordinate: agent.lastResolvedCoordinate)
                         }
                         .padding(.top, 8)
                     }
@@ -155,8 +146,8 @@ struct ContentView: View {
     }
 }
 
-private struct HourlyProbabilityRow: View {
-    let point: RainForecast.DataPoint
+private struct ForecastTable: View {
+    let points: [RainForecast.DataPoint]
     let timezone: TimeZone
 
     private var timeFormatter: Date.FormatStyle {
@@ -168,45 +159,67 @@ private struct HourlyProbabilityRow: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(spacing: 0) {
             HStack {
-                Text(point.date.formatted(timeFormatter))
-                    .font(.subheadline)
+                Text("Time")
+                    .font(.subheadline.weight(.semibold))
+                    .textCase(.uppercase)
                 Spacer()
-                Text("\(Int(point.probability.rounded()))%")
-                    .monospacedDigit()
-                    .fontWeight(.semibold)
+                Text("Chance")
+                    .font(.subheadline.weight(.semibold))
+                    .textCase(.uppercase)
             }
-            ProbabilityBar(probability: point.probability)
+            .padding(.vertical, 6)
+            .padding(.horizontal, 12)
+            .background(Color.secondary.opacity(0.1))
+
+            ForEach(points) { point in
+                Divider()
+                ForecastTableRow(point: point, timeFormatter: timeFormatter)
+            }
         }
-        .padding(.vertical, 2)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+        )
     }
 }
 
-private struct ProbabilityBar: View {
-    let probability: Double
-
-    private var barColors: [Color] {
-        if probability >= 70 {
-            return [Color.blue, Color.purple]
-        } else if probability >= 40 {
-            return [Color.cyan, Color.blue]
-        } else {
-            return [Color.teal.opacity(0.6), Color.cyan.opacity(0.8)]
-        }
-    }
+private struct ForecastTableRow: View {
+    let point: RainForecast.DataPoint
+    let timeFormatter: Date.FormatStyle
 
     var body: some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 3)
-                    .fill(Color.secondary.opacity(0.15))
-                RoundedRectangle(cornerRadius: 3)
-                    .fill(LinearGradient(colors: barColors, startPoint: .leading, endPoint: .trailing))
-                    .frame(width: max(4, geometry.size.width * CGFloat(probability / 100.0)))
-            }
+        HStack {
+            Text(point.date.formatted(timeFormatter))
+                .font(.body.monospacedDigit())
+            Spacer()
+            Text("\(Int(point.probability.rounded()))%")
+                .font(.body.monospacedDigit())
+                .fontWeight(.semibold)
         }
-        .frame(height: 8)
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .background(Color(.systemBackground))
+    }
+}
+
+private struct ForecastMetadataView: View {
+    let timezone: TimeZone
+    let coordinate: CLLocationCoordinate2D?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let coordinate {
+                Text("Coordinates: \(String(format: "%.4f", coordinate.latitude)), \(String(format: "%.4f", coordinate.longitude))")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            Text("Times shown in \(timezone.localizedName(for: .shortGeneric, locale: .current) ?? timezone.identifier)")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
     }
 }
 
