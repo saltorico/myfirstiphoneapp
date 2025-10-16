@@ -118,7 +118,13 @@ struct ContentView: View {
                             Text("Next 24 hours precipitation chance")
                                 .font(.headline)
                             ForEach(forecast.next24HourPoints) { point in
-                                HourlyProbabilityRow(point: point, timezone: forecast.timezone)
+                                HStack {
+                                    Text(point.date, format: .dateTime.hour().minute())
+                                    Spacer()
+                                    Text("\(Int(point.probability.rounded()))%")
+                                        .monospacedDigit()
+                                        .fontWeight(.semibold)
+                                }
                             }
                             Text("Times shown in \(forecast.timezone.localizedName(for: .shortGeneric, locale: .current) ?? forecast.timezone.identifier)")
                                 .font(.footnote)

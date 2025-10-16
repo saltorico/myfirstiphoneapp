@@ -354,7 +354,6 @@ extension WeatherAgent {
         let lookaheadPoints = Array(next24.prefix(12))
         agent.lastForecast = RainForecast(points: lookaheadPoints,
                                           next24HourPoints: next24,
-                                          allPoints: next24,
                                           timezone: .current,
                                           lookaheadHours: 12)
         agent.statusMessage = "Preview data"

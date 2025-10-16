@@ -11,7 +11,6 @@ struct RainForecast {
 
     let points: [DataPoint]
     let next24HourPoints: [DataPoint]
-    let allPoints: [DataPoint]
     let timezone: TimeZone
     let lookaheadHours: Int
 
@@ -31,11 +30,11 @@ struct RainForecast {
     }
 
     var upcomingRainPoint: DataPoint? {
-        firstDataPoint { $0.probability >= 50 || $0.rainfallAmount > 0.1 }
+        points.first { $0.probability >= 50 || $0.rainfallAmount > 0.1 }
     }
 
     var moderateRainPoint: DataPoint? {
-        firstDataPoint { $0.probability >= 20 || $0.rainfallAmount > 0.05 }
+        points.first { $0.probability >= 20 || $0.rainfallAmount > 0.05 }
     }
 
     var highestProbabilityPoint: DataPoint? {
@@ -68,27 +67,29 @@ struct RainResult {
         if let rainPoint = forecast.upcomingRainPoint {
             isRainLikely = true
             likelyTime = rainPoint.date
-            let detectionWindow = forecast.detectionWindow(for: rainPoint)
-            summary = RainResult.summaryText(leadIn: "Rain likely", point: rainPoint, probability: rainPoint.probability, detectionWindow: detectionWindow, lookaheadHours: forecast.lookaheadHours, shortTimeFormatter: shortTimeFormatter, dayTimeFormatter: dayTimeFormatter)
-            details = RainResult.detailText(for: forecast, shortTimeFormatter: shortTimeFormatter, dayTimeFormatter: dayTimeFormatter)
+            summary = "Rain likely around \(rainPoint.date.formatted(date: .omitted, time: .shortened)) with a \(Int(rainPoint.probability.rounded()))% chance."
+            if let maxPoint = forecast.highestProbabilityPoint {
+                details = "Peak chance reaches \(Int(maxPoint.probability.rounded()))% during the forecast window."
+            } else {
+                details = nil
+            }
             iconName = "cloud.rain"
         } else if let moderatePoint = forecast.moderateRainPoint {
             isRainLikely = false
             likelyTime = moderatePoint.date
-            let detectionWindow = forecast.detectionWindow(for: moderatePoint)
-            summary = RainResult.summaryText(leadIn: "Showers possible", point: moderatePoint, probability: moderatePoint.probability, detectionWindow: detectionWindow, lookaheadHours: forecast.lookaheadHours, shortTimeFormatter: shortTimeFormatter, dayTimeFormatter: dayTimeFormatter)
-            details = RainResult.detailText(for: forecast, shortTimeFormatter: shortTimeFormatter, dayTimeFormatter: dayTimeFormatter)
+            summary = "Showers possible around \(moderatePoint.date.formatted(date: .omitted, time: .shortened)) with a \(Int(moderatePoint.probability.rounded()))% chance."
+            if let maxPoint = forecast.highestProbabilityPoint {
+                details = "Peak chance reaches \(Int(maxPoint.probability.rounded()))% within the next \(forecast.lookaheadHours) hours."
+            } else {
+                details = nil
+            }
             iconName = "cloud.drizzle"
         } else {
             isRainLikely = false
             likelyTime = Date()
             summary = "No rain expected in the next \(forecast.lookaheadHours) hours."
             if let maxPoint = forecast.highestProbabilityPoint {
-                let detectionWindow = forecast.detectionWindow(for: maxPoint)
-                let formatter = detectionWindow == .extended ? dayTimeFormatter : shortTimeFormatter
-                let prefix = detectionWindow == .extended ? "on" : "around"
-                let windowDescription = RainResult.windowDescription(for: detectionWindow, lookaheadHours: forecast.lookaheadHours)
-                details = "Highest chance is \(Int(maxPoint.probability.rounded()))% \(prefix) \(maxPoint.date.formatted(formatter)) \(windowDescription)."
+                details = "Highest chance stays around \(Int(maxPoint.probability.rounded()))% with minimal rainfall expected."
             } else {
                 details = nil
             }
@@ -217,7 +218,6 @@ final class WeatherService {
 
         return RainForecast(points: consideredPoints,
                              next24HourPoints: next24Points,
-                             allPoints: allPoints,
                              timezone: timezone,
                              lookaheadHours: lookahead.rawValue)
     }
