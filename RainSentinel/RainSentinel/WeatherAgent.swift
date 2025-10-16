@@ -346,12 +346,17 @@ extension WeatherAgent {
         agent.lastResult = RainResult.mock
         let now = Date()
         let calendar = Calendar.current
-        let points = (0..<6).compactMap { offset -> RainForecast.DataPoint? in
+        let next24 = (0..<24).compactMap { offset -> RainForecast.DataPoint? in
             guard let date = calendar.date(byAdding: .hour, value: offset, to: now) else { return nil }
-            let probability = min(100, Double(20 + offset * 10))
-            return RainForecast.DataPoint(date: date, probability: probability, rainfallAmount: Double(offset) * 0.1)
+            let probability = min(100, Double(20 + offset * 5))
+            return RainForecast.DataPoint(date: date, probability: probability, rainfallAmount: Double(offset) * 0.05)
         }
-        agent.lastForecast = RainForecast(points: points, timezone: .current, lookaheadHours: 12)
+        let lookaheadPoints = Array(next24.prefix(12))
+        agent.lastForecast = RainForecast(points: lookaheadPoints,
+                                          next24HourPoints: next24,
+                                          allPoints: next24,
+                                          timezone: .current,
+                                          lookaheadHours: 12)
         agent.statusMessage = "Preview data"
         return agent
     }

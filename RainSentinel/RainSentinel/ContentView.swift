@@ -113,18 +113,12 @@ struct ContentView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
-                    if let forecast = agent.lastForecast, !forecast.points.isEmpty {
+                    if let forecast = agent.lastForecast, !forecast.next24HourPoints.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("Hourly precipitation chance")
+                            Text("Next 24 hours precipitation chance")
                                 .font(.headline)
-                            ForEach(forecast.points) { point in
-                                HStack {
-                                    Text(point.date, format: .dateTime.hour().minute())
-                                    Spacer()
-                                    Text("\(Int(point.probability.rounded()))%")
-                                        .monospacedDigit()
-                                        .fontWeight(.semibold)
-                                }
+                            ForEach(forecast.next24HourPoints) { point in
+                                HourlyProbabilityRow(point: point, timezone: forecast.timezone)
                             }
                             Text("Times shown in \(forecast.timezone.localizedName(for: .shortGeneric, locale: .current) ?? forecast.timezone.identifier)")
                                 .font(.footnote)
@@ -152,6 +146,57 @@ struct ContentView: View {
                 .presentationDetents([.medium])
             }
         }
+    }
+}
+
+private struct HourlyProbabilityRow: View {
+    let point: RainForecast.DataPoint
+    let timezone: TimeZone
+
+    private var timeFormatter: Date.FormatStyle {
+        Date.FormatStyle(date: .omitted, time: .shortened).timeZone(timezone)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(point.date.formatted(timeFormatter))
+                    .font(.subheadline)
+                Spacer()
+                Text("\(Int(point.probability.rounded()))%")
+                    .monospacedDigit()
+                    .fontWeight(.semibold)
+            }
+            ProbabilityBar(probability: point.probability)
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+private struct ProbabilityBar: View {
+    let probability: Double
+
+    private var barColors: [Color] {
+        if probability >= 70 {
+            return [Color.blue, Color.purple]
+        } else if probability >= 40 {
+            return [Color.cyan, Color.blue]
+        } else {
+            return [Color.teal.opacity(0.6), Color.cyan.opacity(0.8)]
+        }
+    }
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(Color.secondary.opacity(0.15))
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(LinearGradient(colors: barColors, startPoint: .leading, endPoint: .trailing))
+                    .frame(width: max(4, geometry.size.width * CGFloat(probability / 100.0)))
+            }
+        }
+        .frame(height: 8)
     }
 }
 

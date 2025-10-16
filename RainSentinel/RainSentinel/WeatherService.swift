@@ -1,32 +1,6 @@
 import Foundation
 import CoreLocation
 
-enum RainLookahead: Int, CaseIterable, Identifiable {
-    case sixHours = 6
-    case twelveHours = 12
-    case twentyFourHours = 24
-    case fortyEightHours = 48
-
-    var id: Int { rawValue }
-
-    var description: String {
-        switch self {
-        case .sixHours:
-            return "6 hours"
-        case .twelveHours:
-            return "12 hours"
-        case .twentyFourHours:
-            return "24 hours"
-        case .fortyEightHours:
-            return "48 hours"
-        }
-    }
-
-    var forecastDays: Int {
-        max(1, Int(ceil(Double(rawValue) / 24.0)))
-    }
-}
-
 struct RainForecast {
     struct DataPoint: Identifiable {
         let id = UUID()
@@ -36,15 +10,47 @@ struct RainForecast {
     }
 
     let points: [DataPoint]
+    let next24HourPoints: [DataPoint]
+    let allPoints: [DataPoint]
     let timezone: TimeZone
     let lookaheadHours: Int
 
+    enum DetectionWindow {
+        case lookahead
+        case next24Hours
+        case extended
+    }
+
+    private func firstDataPoint(where predicate: (DataPoint) -> Bool) -> DataPoint? {
+        for series in [points, next24HourPoints, allPoints] {
+            if let match = series.first(where: predicate) {
+                return match
+            }
+        }
+        return nil
+    }
+
     var upcomingRainPoint: DataPoint? {
-        points.first { $0.probability >= 60 || $0.rainfallAmount > 0.1 }
+        firstDataPoint { $0.probability >= 50 || $0.rainfallAmount > 0.1 }
+    }
+
+    var moderateRainPoint: DataPoint? {
+        firstDataPoint { $0.probability >= 20 || $0.rainfallAmount > 0.05 }
     }
 
     var highestProbabilityPoint: DataPoint? {
-        points.max(by: { $0.probability < $1.probability })
+        (allPoints.isEmpty ? (next24HourPoints.isEmpty ? points : next24HourPoints) : allPoints)
+            .max(by: { $0.probability < $1.probability })
+    }
+
+    func detectionWindow(for point: DataPoint) -> DetectionWindow {
+        if points.contains(where: { $0.id == point.id }) {
+            return .lookahead
+        }
+        if next24HourPoints.contains(where: { $0.id == point.id }) {
+            return .next24Hours
+        }
+        return .extended
     }
 }
 
@@ -56,22 +62,33 @@ struct RainResult {
     let iconName: String
 
     init(forecast: RainForecast) {
+        let shortTimeFormatter = Date.FormatStyle(date: .omitted, time: .shortened).timeZone(forecast.timezone)
+        let dayTimeFormatter = Date.FormatStyle(date: .abbreviated, time: .shortened).timeZone(forecast.timezone)
+
         if let rainPoint = forecast.upcomingRainPoint {
             isRainLikely = true
             likelyTime = rainPoint.date
-            summary = "Rain likely around \(rainPoint.date.formatted(date: .omitted, time: .shortened)) with a \(Int(rainPoint.probability))% chance."
-            if let maxPoint = forecast.highestProbabilityPoint {
-                details = "Peak chance reaches \(Int(maxPoint.probability))% during the forecast window."
-            } else {
-                details = nil
-            }
+            let detectionWindow = forecast.detectionWindow(for: rainPoint)
+            summary = RainResult.summaryText(leadIn: "Rain likely", point: rainPoint, probability: rainPoint.probability, detectionWindow: detectionWindow, lookaheadHours: forecast.lookaheadHours, shortTimeFormatter: shortTimeFormatter, dayTimeFormatter: dayTimeFormatter)
+            details = RainResult.detailText(for: forecast, shortTimeFormatter: shortTimeFormatter, dayTimeFormatter: dayTimeFormatter)
             iconName = "cloud.rain"
+        } else if let moderatePoint = forecast.moderateRainPoint {
+            isRainLikely = false
+            likelyTime = moderatePoint.date
+            let detectionWindow = forecast.detectionWindow(for: moderatePoint)
+            summary = RainResult.summaryText(leadIn: "Showers possible", point: moderatePoint, probability: moderatePoint.probability, detectionWindow: detectionWindow, lookaheadHours: forecast.lookaheadHours, shortTimeFormatter: shortTimeFormatter, dayTimeFormatter: dayTimeFormatter)
+            details = RainResult.detailText(for: forecast, shortTimeFormatter: shortTimeFormatter, dayTimeFormatter: dayTimeFormatter)
+            iconName = "cloud.drizzle"
         } else {
             isRainLikely = false
             likelyTime = Date()
             summary = "No rain expected in the next \(forecast.lookaheadHours) hours."
             if let maxPoint = forecast.highestProbabilityPoint {
-                details = "Highest chance stays around \(Int(maxPoint.probability))% with minimal rainfall expected."
+                let detectionWindow = forecast.detectionWindow(for: maxPoint)
+                let formatter = detectionWindow == .extended ? dayTimeFormatter : shortTimeFormatter
+                let prefix = detectionWindow == .extended ? "on" : "around"
+                let windowDescription = RainResult.windowDescription(for: detectionWindow, lookaheadHours: forecast.lookaheadHours)
+                details = "Highest chance is \(Int(maxPoint.probability.rounded()))% \(prefix) \(maxPoint.date.formatted(formatter)) \(windowDescription)."
             } else {
                 details = nil
             }
@@ -91,6 +108,47 @@ struct RainResult {
         self.details = details
         self.likelyTime = likelyTime
         self.iconName = iconName
+    }
+
+    private static func summaryText(leadIn: String,
+                                    point: RainForecast.DataPoint,
+                                    probability: Double,
+                                    detectionWindow: RainForecast.DetectionWindow,
+                                    lookaheadHours: Int,
+                                    shortTimeFormatter: Date.FormatStyle,
+                                    dayTimeFormatter: Date.FormatStyle) -> String {
+        let probabilityValue = Int(probability.rounded())
+        switch detectionWindow {
+        case .lookahead:
+            return "\(leadIn) around \(point.date.formatted(shortTimeFormatter)) with a \(probabilityValue)% chance."
+        case .next24Hours:
+            return "\(leadIn) later around \(point.date.formatted(shortTimeFormatter)) with a \(probabilityValue)% chance (outside the next \(lookaheadHours) hours)."
+        case .extended:
+            return "\(leadIn) on \(point.date.formatted(dayTimeFormatter)) with a \(probabilityValue)% chance."
+        }
+    }
+
+    private static func detailText(for forecast: RainForecast,
+                                   shortTimeFormatter: Date.FormatStyle,
+                                   dayTimeFormatter: Date.FormatStyle) -> String? {
+        guard let maxPoint = forecast.highestProbabilityPoint else { return nil }
+        let detectionWindow = forecast.detectionWindow(for: maxPoint)
+        let formatter = detectionWindow == .extended ? dayTimeFormatter : shortTimeFormatter
+        let prefix = detectionWindow == .extended ? "on" : "around"
+        let windowDescription = windowDescription(for: detectionWindow, lookaheadHours: forecast.lookaheadHours)
+        return "Peak chance reaches \(Int(maxPoint.probability.rounded()))% \(prefix) \(maxPoint.date.formatted(formatter)) \(windowDescription)."
+    }
+
+    private static func windowDescription(for detectionWindow: RainForecast.DetectionWindow,
+                                          lookaheadHours: Int) -> String {
+        switch detectionWindow {
+        case .lookahead:
+            return "within the next \(lookaheadHours) hours"
+        case .next24Hours:
+            return "within the next 24 hours"
+        case .extended:
+            return "later in the forecast"
+        }
     }
 }
 
@@ -124,7 +182,7 @@ final class WeatherService {
         let rainAmounts = decoded.hourly.rain ?? Array(repeating: 0, count: timeStrings.count)
         let count = min(timeStrings.count, probabilities.count, rainAmounts.count)
 
-        let points: [RainForecast.DataPoint] = (0..<count).compactMap { index in
+        let allPoints: [RainForecast.DataPoint] = (0..<count).compactMap { index in
             let time = timeStrings[index]
             guard let date = ISO8601DateFormatter.openMeteo.date(from: time) else { return nil }
             let probability = probabilities[index]
@@ -134,18 +192,34 @@ final class WeatherService {
 
         let now = Date()
         let horizon = now.addingTimeInterval(TimeInterval(lookahead.rawValue * 3600))
-        let filteredPoints = points.filter { dataPoint in
+        let filteredPoints = allPoints.filter { dataPoint in
             dataPoint.date >= now && dataPoint.date <= horizon
         }
 
         let consideredPoints: [RainForecast.DataPoint]
         if filteredPoints.isEmpty {
-            consideredPoints = Array(points.prefix(lookahead.rawValue))
+            consideredPoints = Array(allPoints.prefix(lookahead.rawValue))
         } else {
             consideredPoints = filteredPoints
         }
 
-        return RainForecast(points: consideredPoints, timezone: timezone, lookaheadHours: lookahead.rawValue)
+        let dayAhead = now.addingTimeInterval(24 * 3600)
+        let next24Candidates = allPoints.filter { dataPoint in
+            dataPoint.date >= now && dataPoint.date <= dayAhead
+        }
+
+        let next24Points: [RainForecast.DataPoint]
+        if next24Candidates.isEmpty {
+            next24Points = Array(allPoints.prefix(24))
+        } else {
+            next24Points = Array(next24Candidates.prefix(24))
+        }
+
+        return RainForecast(points: consideredPoints,
+                             next24HourPoints: next24Points,
+                             allPoints: allPoints,
+                             timezone: timezone,
+                             lookaheadHours: lookahead.rawValue)
     }
 
     func forecastLink(for coordinate: CLLocationCoordinate2D, lookahead: RainLookahead) -> URL? {
