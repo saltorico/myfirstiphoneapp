@@ -115,16 +115,6 @@ struct RainResult {
                 preconditionFailure("No-rain conclusion drawn without expected 24/48 data points (actual: \(pointCount))")
             }
 
-            let timezones = forecast.allPoints.map { forecast.timezone.secondsFromGMT(for: $0.date) }
-            if let firstOffset = timezones.first {
-                let inconsistentOffsets = timezones.filter { abs($0 - firstOffset) > 3600 }
-                if !inconsistentOffsets.isEmpty {
-                    preconditionFailure("Timezone offsets vary unexpectedly across forecast points: \(inconsistentOffsets)")
-                }
-            } else {
-                preconditionFailure("Unable to derive timezone offsets because forecast points are missing timestamps.")
-            }
-
             let nonZeroPoints = forecast.allPoints.filter { $0.probability > 0 || $0.rainfallAmount > 0 }
             if !nonZeroPoints.isEmpty {
                 preconditionFailure("No-rain conclusion contradicted by \(nonZeroPoints.count) data points with precipitation signals.")
@@ -218,9 +208,7 @@ final class WeatherService {
 
         let decoded = try decoder.decode(OpenMeteoResponse.self, from: data)
         let rawJSON = String(data: data, encoding: .utf8)
-        guard let timezone = TimeZone(identifier: decoded.timezone) ?? TimeZone(secondsFromGMT: decoded.utcOffsetSeconds) else {
-            throw WeatherError.decodingFailed
-        }
+        let timezone = TimeZone.current
 
         let timeStrings = decoded.hourly.time
         let probabilities = decoded.hourly.precipitationProbability ?? Array(repeating: 0, count: timeStrings.count)
@@ -235,7 +223,6 @@ final class WeatherService {
                        rainAmounts: rainAmounts,
                        count: count,
                        lookahead: lookahead,
-                       timezone: timezone,
                        parser: parser)
 #endif
 
@@ -243,7 +230,7 @@ final class WeatherService {
             let time = timeStrings[index]
             guard let date = parser.date(from: time) else {
 #if DEBUG
-                assertionFailure("Failed to parse hourly timestamp \(time) for timezone \(timezone.identifier ?? \"offset:\(timezone.secondsFromGMT())\").")
+                assertionFailure("Failed to parse hourly timestamp \(time).")
 #endif
                 return nil
             }
@@ -286,7 +273,7 @@ final class WeatherService {
         return RainForecast(points: consideredPoints,
                              next24HourPoints: next24Points,
                              allPoints: allPoints,
-                             timezone: timezone,
+                              timezone: timezone,
                              lookaheadHours: lookahead.rawValue,
                              rawResponseJSON: rawJSON)
     }
@@ -317,7 +304,6 @@ extension WeatherService {
                                rainAmounts: [Double],
                                count: Int,
                                lookahead: RainLookahead,
-                               timezone: TimeZone,
                                parser: OpenMeteoDateParser) {
         assert(!timeStrings.isEmpty, "Expected hourly time stamps from weather service response")
 
@@ -336,11 +322,6 @@ extension WeatherService {
                "Unexpected truncation while preparing rain data points (have: \(count), expected at least: \(minimumExpectedPoints))")
 
         let referenceDate = Date()
-        let timezoneOffset = timezone.secondsFromGMT(for: referenceDate)
-        let offsetDifference = abs(timezoneOffset - decoded.utcOffsetSeconds)
-        assert(offsetDifference <= 3600,
-               "Timezone offset mismatch detected (service: \(decoded.utcOffsetSeconds), system: \(timezoneOffset))")
-
         let lookaheadHorizon = referenceDate.addingTimeInterval(TimeInterval(lookahead.rawValue * 3600))
         if let firstTime = timeStrings.first,
            let firstDate = parser.date(from: firstTime) {
