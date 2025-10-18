@@ -107,20 +107,33 @@ struct RainResult {
 
 #if DEBUG
             let pointCount = forecast.allPoints.count
-            if forecast.lookaheadHours >= 24 {
-                assert(pointCount == 24 || pointCount == 48,
-                       "No-rain conclusion drawn without expected 24/48 data points (actual: \(pointCount))")
+            guard pointCount > 0 else {
+                preconditionFailure("No-rain conclusion drawn with zero hourly data points – hourly parsing failed.")
+            }
+
+            if forecast.lookaheadHours >= 24 && !(pointCount == 24 || pointCount == 48) {
+                preconditionFailure("No-rain conclusion drawn without expected 24/48 data points (actual: \(pointCount))")
             }
 
             let timezones = forecast.allPoints.map { forecast.timezone.secondsFromGMT(for: $0.date) }
             if let firstOffset = timezones.first {
-                assert(timezones.allSatisfy { abs($0 - firstOffset) <= 3600 },
-                       "Timezone offsets vary unexpectedly across forecast points")
+                let inconsistentOffsets = timezones.filter { abs($0 - firstOffset) > 3600 }
+                if !inconsistentOffsets.isEmpty {
+                    preconditionFailure("Timezone offsets vary unexpectedly across forecast points: \(inconsistentOffsets)")
+                }
+            } else {
+                preconditionFailure("Unable to derive timezone offsets because forecast points are missing timestamps.")
             }
 
             let nonZeroPoints = forecast.allPoints.filter { $0.probability > 0 || $0.rainfallAmount > 0 }
-            assert(nonZeroPoints.isEmpty,
-                   "No-rain conclusion contradicted by \(nonZeroPoints.count) data points with precipitation signals")
+            if !nonZeroPoints.isEmpty {
+                preconditionFailure("No-rain conclusion contradicted by \(nonZeroPoints.count) data points with precipitation signals.")
+            }
+
+            if let maxPoint = forecast.highestProbabilityPoint,
+               maxPoint.probability >= 50 || maxPoint.rainfallAmount > 0.1 {
+                preconditionFailure("Highest probability point (\(Int(maxPoint.probability.rounded()))%, \(maxPoint.rainfallAmount) mm) conflicts with no-rain outcome.")
+            }
 #endif
         }
     }
@@ -213,6 +226,18 @@ final class WeatherService {
         let probabilities = decoded.hourly.precipitationProbability ?? Array(repeating: 0, count: timeStrings.count)
         let rainAmounts = decoded.hourly.rain ?? Array(repeating: 0, count: timeStrings.count)
         let count = min(timeStrings.count, probabilities.count, rainAmounts.count)
+        let parser = OpenMeteoDateParser(timezone: timezone)
+
+#if DEBUG
+        debugValidate(decoded: decoded,
+                       timeStrings: timeStrings,
+                       probabilities: probabilities,
+                       rainAmounts: rainAmounts,
+                       count: count,
+                       lookahead: lookahead,
+                       timezone: timezone,
+                       parser: parser)
+#endif
 
 #if DEBUG
         debugValidate(decoded: decoded,
@@ -226,11 +251,22 @@ final class WeatherService {
 
         let allPoints: [RainForecast.DataPoint] = (0..<count).compactMap { index in
             let time = timeStrings[index]
-            guard let date = ISO8601DateFormatter.openMeteo.date(from: time) else { return nil }
+            guard let date = parser.date(from: time) else {
+#if DEBUG
+                assertionFailure("Failed to parse hourly timestamp \(time) for timezone \(timezone.identifier ?? \"offset:\(timezone.secondsFromGMT())\").")
+#endif
+                return nil
+            }
             let probability = probabilities[index]
             let rainfall = rainAmounts[index]
             return RainForecast.DataPoint(date: date, probability: probability, rainfallAmount: rainfall)
         }
+
+#if DEBUG
+        if allPoints.count != count {
+            assertionFailure("Parsed only \(allPoints.count) of \(count) hourly timestamps – forecast integrity compromised.")
+        }
+#endif
 
         let now = Date()
         let horizon = now.addingTimeInterval(TimeInterval(lookahead.rawValue * 3600))
@@ -291,7 +327,8 @@ extension WeatherService {
                                rainAmounts: [Double],
                                count: Int,
                                lookahead: RainLookahead,
-                               timezone: TimeZone) {
+                               timezone: TimeZone,
+                               parser: OpenMeteoDateParser) {
         assert(!timeStrings.isEmpty, "Expected hourly time stamps from weather service response")
 
         if let probabilityCount = decoded.hourly.precipitationProbability?.count {
@@ -316,13 +353,32 @@ extension WeatherService {
 
         let lookaheadHorizon = referenceDate.addingTimeInterval(TimeInterval(lookahead.rawValue * 3600))
         if let firstTime = timeStrings.first,
-           let firstDate = ISO8601DateFormatter.openMeteo.date(from: firstTime) {
+           let firstDate = parser.date(from: firstTime) {
             assert(firstDate <= lookaheadHorizon.addingTimeInterval(48 * 3600),
                    "First data point is unexpectedly far in the future: \(firstDate)")
+        } else if let firstTime = timeStrings.first {
+            assertionFailure("Unable to parse first hourly timestamp: \(firstTime)")
         }
     }
 }
 #endif
+
+private struct OpenMeteoDateParser {
+    private let formatter: DateFormatter
+
+    init(timezone: TimeZone) {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm"
+        formatter.timeZone = timezone
+        self.formatter = formatter
+    }
+
+    func date(from timeString: String) -> Date? {
+        formatter.date(from: timeString)
+    }
+}
 
 private struct OpenMeteoResponse: Decodable {
     let timezone: String
@@ -348,11 +404,3 @@ private struct OpenMeteoResponse: Decodable {
     }
 }
 
-private extension ISO8601DateFormatter {
-    static let openMeteo: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withFullDate, .withTime, .withDashSeparatorInDate, .withColonSeparatorInTime]
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        return formatter
-    }()
-}
