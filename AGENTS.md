@@ -10,3 +10,4 @@
 - _[initial]_ Repository instructions file created.
 - _[2025-10-18]_ Resolved duplicate debug validation call introduced during merge conflict cleanup in `WeatherService.swift`.
 - _[2025-10-18]_ Simplified `WeatherService` timestamp handling to rely on local timezone after removing remote timezone logic per user feedback.
+- _[2025-10-18]_ Corrected Open-Meteo timezone selection and strengthened forecast window debug assertions to keep lookahead and next 24-hour tables aligned.
