@@ -239,16 +239,6 @@ final class WeatherService {
                        parser: parser)
 #endif
 
-#if DEBUG
-        debugValidate(decoded: decoded,
-                       timeStrings: timeStrings,
-                       probabilities: probabilities,
-                       rainAmounts: rainAmounts,
-                       count: count,
-                       lookahead: lookahead,
-                       timezone: timezone)
-#endif
-
         let allPoints: [RainForecast.DataPoint] = (0..<count).compactMap { index in
             let time = timeStrings[index]
             guard let date = parser.date(from: time) else {
