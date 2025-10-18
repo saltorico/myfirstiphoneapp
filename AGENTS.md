@@ -22,3 +22,4 @@
 - _[2025-02-15]_ Removed debug-only forecast tables/raw JSON, introduced flappy bird easter egg gate keyed to imminent rain, and added SpriteKit scene for gameplay.
 - _[2025-02-16]_ Expanded imminent rain window to 60 minutes so the rain-delay mini game appears when next-hour rain is detected and added a debug assertion for stale forecasts.
 - _[2025-02-16]_ Hardened Flappy Bird scene initialization to rebuild missing nodes and added centralized debug assertions after nil bird crash reproduced when tapping before SpriteKit finished configuring.
+- _[2025-02-17]_ Rebuilt Flappy Bird physics, scoring gate collision precision, and in-game art (wings, tail, pipe caps/stripes) to better match the original feel while keeping assertions behind the debug flag.
