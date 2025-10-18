@@ -4,6 +4,7 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject private var agent: WeatherAgent
     @State private var showingScheduleSheet = false
+    @State private var showingRainDelayGame = false
 
     var body: some View {
         NavigationStack {
@@ -120,28 +121,23 @@ struct ContentView: View {
                                 .padding(.top, 4)
 
                             if !forecast.points.isEmpty {
-                                ForecastDisclosure(title: "Look ahead (next \(forecast.lookaheadHours) hours)",
-                                                   points: forecast.points,
-                                                   timezone: forecast.timezone,
-                                                   initiallyExpanded: true)
+                                if forecast.points.count > 24 {
+                                    ScrollView(.vertical) {
+                                        ForecastTable(points: forecast.points, timezone: forecast.timezone)
+                                    }
+                                    .frame(maxHeight: 320)
+                                    .padding(.top, 8)
+                                } else {
+                                    ForecastTable(points: forecast.points, timezone: forecast.timezone)
+                                        .padding(.top, 8)
+                                }
                             }
 
-                            if !forecast.next24HourPoints.isEmpty {
-                                ForecastDisclosure(title: "Next 24 hours precipitation chance",
-                                                   points: forecast.next24HourPoints,
-                                                   timezone: forecast.timezone,
-                                                   initiallyExpanded: forecast.lookaheadHours >= 24)
-                            }
-
-                            if forecast.allPoints.count > forecast.next24HourPoints.count {
-                                ForecastDisclosure(title: "Full hourly forecast",
-                                                   points: forecast.allPoints,
-                                                   timezone: forecast.timezone,
-                                                   initiallyExpanded: false)
-                            }
-
-                            if let rawJSON = forecast.rawResponseJSON {
-                                RawResponseDisclosure(rawJSON: rawJSON)
+                            if shouldOfferRainDelay(for: forecast) {
+                                RainDelayGameButton {
+                                    showingRainDelayGame = true
+                                }
+                                .accessibilityIdentifier("rainDelayGameButton")
                             }
                         }
                         .padding(.top, 8)
@@ -164,6 +160,9 @@ struct ContentView: View {
                         .environmentObject(agent)
                 }
                 .presentationDetents([.medium])
+            }
+            .sheet(isPresented: $showingRainDelayGame) {
+                FlappyBirdGameView()
             }
         }
     }
@@ -255,56 +254,98 @@ private struct ForecastMetadataView: View {
     }
 }
 
-private struct ForecastDisclosure: View {
-    let title: String
-    let points: [RainForecast.DataPoint]
-    let timezone: TimeZone
-    @State private var isExpanded: Bool
+private func shouldOfferRainDelay(for forecast: RainForecast) -> Bool {
+    guard let upcomingPoint = forecast.upcomingRainPoint else { return false }
+    let now = Date()
+    let immediateThreshold: TimeInterval = 20 * 60 // 20 minutes window for "due immediately"
+    return upcomingPoint.date <= now.addingTimeInterval(immediateThreshold)
+}
 
-    init(title: String, points: [RainForecast.DataPoint], timezone: TimeZone, initiallyExpanded: Bool) {
-        self.title = title
-        self.points = points
-        self.timezone = timezone
-        _isExpanded = State(initialValue: initiallyExpanded)
-    }
+private struct RainDelayGameButton: View {
+    let action: () -> Void
 
     var body: some View {
-        DisclosureGroup(isExpanded: $isExpanded) {
-            if points.count > 24 {
-                ScrollView(.vertical) {
-                    ForecastTable(points: points, timezone: timezone)
+        Button(action: action) {
+            HStack(spacing: 14) {
+                FlappyBirdAvatar()
+                    .frame(width: 64, height: 64)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Rain delay flappy bird")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                    Text("Kill a few minutes while the storm rolls in.")
+                        .font(.subheadline)
+                        .foregroundStyle(Color.white.opacity(0.85))
                 }
-                .frame(maxHeight: 320)
-                .padding(.top, 8)
-            } else {
-                ForecastTable(points: points, timezone: timezone)
-                    .padding(.top, 8)
+                Spacer()
             }
-        } label: {
-            Text(title)
-                .font(.headline)
+            .padding()
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(LinearGradient(colors: [.blue, .purple], startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
+            )
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Play flappy bird to pass the time")
     }
 }
 
-private struct RawResponseDisclosure: View {
-    let rawJSON: String
-    @State private var isExpanded = false
-
+private struct FlappyBirdAvatar: View {
     var body: some View {
-        DisclosureGroup(isExpanded: $isExpanded) {
-            ScrollView(.vertical) {
-                Text(rawJSON)
-                    .font(.system(.footnote, design: .monospaced))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 4)
-                    .textSelection(.enabled)
+        ZStack {
+            Circle()
+                .fill(LinearGradient(colors: [.yellow, Color.orange], startPoint: .topLeading, endPoint: .bottomTrailing))
+                .shadow(color: .black.opacity(0.25), radius: 4, x: 0, y: 4)
+            WingShape()
+                .fill(Color.orange.opacity(0.8))
+                .frame(width: 28, height: 20)
+                .offset(x: -4, y: 8)
+            Triangle()
+                .fill(Color.orange)
+                .frame(width: 18, height: 12)
+                .offset(x: 26)
+            Eye()
+                .frame(width: 14, height: 14)
+                .offset(x: 6, y: -8)
+        }
+    }
+
+    private struct WingShape: Shape {
+        func path(in rect: CGRect) -> Path {
+            var path = Path()
+            path.move(to: CGPoint(x: rect.minX, y: rect.midY))
+            path.addQuadCurve(to: CGPoint(x: rect.midX, y: rect.minY), control: CGPoint(x: rect.midX * 0.2, y: rect.minY))
+            path.addQuadCurve(to: CGPoint(x: rect.maxX, y: rect.midY), control: CGPoint(x: rect.maxX, y: rect.minY))
+            path.addQuadCurve(to: CGPoint(x: rect.midX, y: rect.maxY), control: CGPoint(x: rect.maxX, y: rect.maxY))
+            path.addQuadCurve(to: CGPoint(x: rect.minX, y: rect.midY), control: CGPoint(x: rect.midX * 0.2, y: rect.maxY))
+            return path
+        }
+    }
+
+    private struct Triangle: Shape {
+        func path(in rect: CGRect) -> Path {
+            var path = Path()
+            path.move(to: CGPoint(x: rect.minX, y: rect.midY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+            path.closeSubpath()
+            return path
+        }
+    }
+
+    private struct Eye: View {
+        var body: some View {
+            ZStack {
+                Circle()
+                    .fill(Color.white)
+                Circle()
+                    .fill(Color.black)
+                    .frame(width: 6, height: 6)
+                    .offset(x: 2, y: 1)
             }
-            .frame(maxHeight: 240)
-            .padding(.top, 8)
-        } label: {
-            Text("Raw API response")
-                .font(.headline)
+            .shadow(color: .black.opacity(0.3), radius: 1, x: 0, y: 1)
         }
     }
 }
