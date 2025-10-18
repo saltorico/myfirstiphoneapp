@@ -9,3 +9,4 @@
 ## Attempt Log
 - _[initial]_ Repository instructions file created.
 - _[2025-10-18]_ Resolved duplicate debug validation call introduced during merge conflict cleanup in `WeatherService.swift`.
+- _[2025-10-18]_ Simplified `WeatherService` timestamp handling to rely on local timezone after removing remote timezone logic per user feedback.
