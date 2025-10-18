@@ -14,7 +14,6 @@ struct RainForecast {
     let allPoints: [DataPoint]
     let timezone: TimeZone
     let lookaheadHours: Int
-    let rawResponseJSON: String?
 
     enum DetectionWindow {
         case lookahead
@@ -256,7 +255,6 @@ final class WeatherService {
         }
 
         let decoded = try decoder.decode(OpenMeteoResponse.self, from: data)
-        let rawJSON = String(data: data, encoding: .utf8)
         let timezone = TimeZone(identifier: decoded.timezone)
             ?? TimeZone(secondsFromGMT: decoded.utcOffsetSeconds)
             ?? TimeZone.current
@@ -351,9 +349,8 @@ final class WeatherService {
         return RainForecast(points: consideredPoints,
                              next24HourPoints: next24Points,
                              allPoints: allPoints,
-                              timezone: timezone,
-                             lookaheadHours: lookahead.rawValue,
-                             rawResponseJSON: rawJSON)
+                             timezone: timezone,
+                             lookaheadHours: lookahead.rawValue)
     }
 
     func forecastLink(for coordinate: CLLocationCoordinate2D, lookahead: RainLookahead) -> URL? {

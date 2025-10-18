@@ -10,6 +10,7 @@
 - `RainSentinel/RainSentinel/WeatherService.swift`: Builds `RainForecast` models, formats human-readable rain summaries, and houses debug-only integrity assertions for remote data.
 - `RainSentinel/RainSentinel/WeatherAgent.swift`: Orchestrates forecast fetching, persistence, and scheduling logic for the rain sentinel.
 - `RainSentinel/RainSentinel/ContentView.swift`: SwiftUI presentation for forecast summaries, charts, and agent controls.
+- `RainSentinel/RainSentinel/FlappyBirdGame.swift`: SpriteKit-powered easter-egg mini game launched when imminent rain is detected.
 
 ## Attempt Log
 - _[initial]_ Repository instructions file created.
@@ -17,3 +18,4 @@
 - _[2025-10-18]_ Simplified `WeatherService` timestamp handling to rely on local timezone after removing remote timezone logic per user feedback.
 - _[2025-10-18]_ Corrected Open-Meteo timezone selection and strengthened forecast window debug assertions to keep lookahead and next 24-hour tables aligned.
 - _[2025-02-14]_ Adjusted summary phrasing to call out when forecasted rain falls on the next day so "tomorrow" timing is explicit.
+- _[2025-02-15]_ Removed debug-only forecast tables/raw JSON, introduced flappy bird easter egg gate keyed to imminent rain, and added SpriteKit scene for gameplay.
