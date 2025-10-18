@@ -11,6 +11,7 @@
 - `RainSentinel/RainSentinel/WeatherAgent.swift`: Orchestrates forecast fetching, persistence, and scheduling logic for the rain sentinel.
 - `RainSentinel/RainSentinel/ContentView.swift`: SwiftUI presentation for forecast summaries, charts, and agent controls.
 - `RainSentinel/RainSentinel/FlappyBirdGame.swift`: SpriteKit-powered easter-egg mini game launched when imminent rain is detected.
+- `RainSentinel/RainSentinel/BuildConfiguration.swift`: Centralizes build-mode detection and debug-only assertion helper.
 
 ## Attempt Log
 - _[initial]_ Repository instructions file created.
@@ -20,3 +21,4 @@
 - _[2025-02-14]_ Adjusted summary phrasing to call out when forecasted rain falls on the next day so "tomorrow" timing is explicit.
 - _[2025-02-15]_ Removed debug-only forecast tables/raw JSON, introduced flappy bird easter egg gate keyed to imminent rain, and added SpriteKit scene for gameplay.
 - _[2025-02-16]_ Expanded imminent rain window to 60 minutes so the rain-delay mini game appears when next-hour rain is detected and added a debug assertion for stale forecasts.
+- _[2025-02-16]_ Hardened Flappy Bird scene initialization to rebuild missing nodes and added centralized debug assertions after nil bird crash reproduced when tapping before SpriteKit finished configuring.
