@@ -69,11 +69,15 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
 
     private var bird: SKSpriteNode?
     private var scoreLabel: SKLabelNode?
+    private var highScoreLabel: SKLabelNode?
     private var stateLabel: SKLabelNode?
+    private var finalScoreLabel: SKLabelNode?
     private var gameState: GameState = .menu
     private var score = 0
+    private var highScore = 0
     private var spawnActionKey = "pipeSpawn"
     private var groundNode = SKNode()
+    private var groundHeight: CGFloat = 0
     private var configuredSize: CGSize = .zero
 
     override init() {
@@ -109,6 +113,7 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
         ensureSceneReady()
         removeAction(forKey: spawnActionKey)
         removeAllObstacles()
+        speed = 1
         score = 0
         updateScoreLabel()
         gameState = .menu
@@ -116,6 +121,8 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
         bird?.physicsBody?.velocity = .zero
         bird?.zRotation = 0
         bird?.physicsBody?.isDynamic = false
+        finalScoreLabel?.removeFromParent()
+        finalScoreLabel = nil
         showMenu()
     }
 
@@ -143,7 +150,7 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
     private func createGround() {
         groundNode.removeFromParent()
         groundNode = SKNode()
-        let groundHeight = max(configuredSize.height * 0.1, 60)
+        groundHeight = max(configuredSize.height * 0.1, 60)
         let ground = SKSpriteNode(color: SKColor(red: 0.37, green: 0.75, blue: 0.3, alpha: 1), size: CGSize(width: configuredSize.width, height: groundHeight))
         ground.anchorPoint = CGPoint(x: 0.5, y: 0)
         ground.position = CGPoint(x: 0, y: -configuredSize.height / 2)
@@ -158,13 +165,21 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
 
     private func repositionLayout() {
         if let ground = groundNode.children.first as? SKSpriteNode {
+            groundHeight = max(configuredSize.height * 0.1, 60)
             ground.position = CGPoint(x: 0, y: -configuredSize.height / 2)
-            ground.size.width = configuredSize.width
+            ground.size = CGSize(width: configuredSize.width, height: groundHeight)
+            ground.physicsBody = SKPhysicsBody(rectangleOf: ground.size, center: CGPoint(x: 0, y: ground.size.height / 2))
+            ground.physicsBody?.isDynamic = false
+            ground.physicsBody?.categoryBitMask = groundCategory
+            ground.physicsBody?.contactTestBitMask = birdCategory
+            ground.physicsBody?.collisionBitMask = birdCategory
         }
         scoreLabel?.position = CGPoint(x: 0, y: configuredSize.height / 2 - 80)
+        highScoreLabel?.position = CGPoint(x: configuredSize.width / 2 - 24, y: configuredSize.height / 2 - 36)
         if gameState == .menu || gameState == .gameOver {
             stateLabel?.position = CGPoint(x: 0, y: configuredSize.height / 4)
         }
+        finalScoreLabel?.position = CGPoint(x: 0, y: configuredSize.height / 4 - 60)
         if gameState != .playing {
             bird?.position = startingBirdPosition()
         }
@@ -240,15 +255,21 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
 
     private func createWingNode(birdSize: CGSize) -> SKShapeNode {
         let wingPath = CGMutablePath()
-        wingPath.move(to: CGPoint(x: -birdSize.width * 0.1, y: 0))
-        wingPath.addQuadCurve(to: CGPoint(x: birdSize.width * 0.25, y: birdSize.height * 0.05), control: CGPoint(x: birdSize.width * 0.05, y: birdSize.height * 0.38))
-        wingPath.addQuadCurve(to: CGPoint(x: -birdSize.width * 0.1, y: 0), control: CGPoint(x: birdSize.width * 0.15, y: -birdSize.height * 0.2))
+        wingPath.move(to: CGPoint(x: -birdSize.width * 0.12, y: 0))
+        wingPath.addQuadCurve(
+            to: CGPoint(x: birdSize.width * 0.42, y: birdSize.height * 0.07),
+            control: CGPoint(x: birdSize.width * 0.18, y: birdSize.height * 0.42)
+        )
+        wingPath.addQuadCurve(
+            to: CGPoint(x: -birdSize.width * 0.12, y: 0),
+            control: CGPoint(x: birdSize.width * 0.22, y: -birdSize.height * 0.24)
+        )
 
         let wing = SKShapeNode(path: wingPath)
         wing.fillColor = SKColor(red: 0.96, green: 0.76, blue: 0.12, alpha: 1)
         wing.strokeColor = SKColor(red: 0.91, green: 0.6, blue: 0.05, alpha: 1)
-        wing.lineWidth = 2
-        wing.position = CGPoint(x: -birdSize.width * 0.15, y: -birdSize.height * 0.05)
+        wing.lineWidth = 2.5
+        wing.position = CGPoint(x: -birdSize.width * 0.18, y: -birdSize.height * 0.05)
         wing.zPosition = 0.5
         wing.name = "wing"
         return wing
@@ -292,10 +313,27 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
         label.zPosition = 10
         addChild(label)
         scoreLabel = label
+        recreateHighScoreLabelIfNeeded()
+    }
+
+    private func recreateHighScoreLabelIfNeeded() {
+        highScoreLabel?.removeFromParent()
+        let label = SKLabelNode(fontNamed: "AvenirNext-Medium")
+        label.fontSize = 22
+        label.fontColor = .white.withAlphaComponent(0.9)
+        label.horizontalAlignmentMode = .right
+        label.verticalAlignmentMode = .top
+        label.position = CGPoint(x: configuredSize.width / 2 - 24, y: configuredSize.height / 2 - 36)
+        label.text = "HI \(highScore)"
+        label.zPosition = 10
+        addChild(label)
+        highScoreLabel = label
     }
 
     private func showMenu() {
         stateLabel?.removeFromParent()
+        finalScoreLabel?.removeFromParent()
+        finalScoreLabel = nil
         let label = SKLabelNode(fontNamed: "AvenirNext-DemiBold")
         label.text = "Tap to start"
         label.fontColor = .white
@@ -311,6 +349,9 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
     private func startGame() {
         guard ensureSceneReady() else { return }
         stateLabel?.removeFromParent()
+        finalScoreLabel?.removeFromParent()
+        finalScoreLabel = nil
+        speed = 1
         score = 0
         updateScoreLabel()
         bird?.physicsBody?.isDynamic = true
@@ -338,18 +379,31 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
         BuildConfiguration.debugAssert(configuredSize != .zero, "Configured size should be known when spawning pipes.")
         let pipeWidth: CGFloat = 70
         let gapHeight = max(configuredSize.height * 0.28, 160)
-        let maxOffset = max(configuredSize.height * 0.25, 100)
-        let verticalOffset = CGFloat.random(in: -maxOffset...maxOffset)
-
+        let groundTopY = -configuredSize.height / 2 + groundHeight
+        let ceilingY = configuredSize.height / 2
         let minimumPipeHeight = max(configuredSize.height * 0.2, 120)
-        let topPipeHeight = max(configuredSize.height / 2 + gapHeight / 2 + verticalOffset, minimumPipeHeight)
-        let bottomPipeHeight = max(configuredSize.height / 2 + gapHeight / 2 - verticalOffset, minimumPipeHeight)
+        BuildConfiguration.debugAssert(groundHeight > 0, "Ground height should be established before spawning pipes.")
+
+        let minCenterY = groundTopY + gapHeight / 2 + minimumPipeHeight
+        let maxCenterY = ceilingY - gapHeight / 2 - minimumPipeHeight
+        let clampedRange: ClosedRange<CGFloat>
+        if minCenterY <= maxCenterY {
+            clampedRange = minCenterY...maxCenterY
+        } else {
+            let fallbackCenter = (groundTopY + ceilingY) / 2
+            clampedRange = fallbackCenter...fallbackCenter
+            BuildConfiguration.debugAssert(false, "Pipe gap constraints collapsed; falling back to centered gap.")
+        }
+        let verticalOffset = CGFloat.random(in: clampedRange)
+
+        let topPipeHeight = max(ceilingY - (verticalOffset + gapHeight / 2), minimumPipeHeight)
+        let bottomPipeHeight = max((verticalOffset - gapHeight / 2) - groundTopY, minimumPipeHeight)
 
         let topPipe = pipeNode(height: topPipeHeight, anchorY: 0, centerOffsetY: topPipeHeight / 2)
-        topPipe.position = CGPoint(x: configuredSize.width / 2 + pipeWidth, y: gapHeight / 2 + verticalOffset)
+        topPipe.position = CGPoint(x: configuredSize.width / 2 + pipeWidth, y: verticalOffset + gapHeight / 2)
 
-        let bottomPipe = pipeNode(height: bottomPipeHeight, anchorY: 1, centerOffsetY: -bottomPipeHeight / 2)
-        bottomPipe.position = CGPoint(x: configuredSize.width / 2 + pipeWidth, y: -gapHeight / 2 + verticalOffset)
+        let bottomPipe = pipeNode(height: bottomPipeHeight, anchorY: 0, centerOffsetY: bottomPipeHeight / 2)
+        bottomPipe.position = CGPoint(x: configuredSize.width / 2 + pipeWidth, y: groundTopY)
 
         let gapNode = SKNode()
         gapNode.name = "gap"
@@ -375,6 +429,8 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
         addChild(topPipe)
         addChild(bottomPipe)
         addChild(gapNode)
+
+        BuildConfiguration.debugAssert(abs(bottomPipe.frame.minY - groundTopY) <= 1.0, "Bottom pipe should align with horizon.")
     }
 
     private func pipeNode(height: CGFloat, anchorY: CGFloat, centerOffsetY: CGFloat) -> SKSpriteNode {
@@ -390,6 +446,7 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
         body.collisionBitMask = birdCategory
         pipe.physicsBody = body
         decoratePipe(pipe, anchorY: anchorY)
+        BuildConfiguration.debugAssert(height >= 0, "Pipe height should be non-negative.")
         return pipe
     }
 
@@ -460,8 +517,11 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
         BuildConfiguration.debugAssert(isSceneReady, "Crash handling expected active scene nodes.")
         gameState = .gameOver
         removeAction(forKey: spawnActionKey)
+        stopScrollingObstacles()
         bird?.physicsBody?.collisionBitMask = groundCategory | obstacleCategory
         bird?.childNode(withName: "wing")?.removeAction(forKey: "flap")
+        speed = 0
+
         let label = SKLabelNode(fontNamed: "AvenirNext-DemiBold")
         label.text = "Game over • Tap to retry"
         label.fontColor = .white
@@ -470,15 +530,37 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
         label.zPosition = 10
         addChild(label)
         stateLabel = label
+
+        finalScoreLabel?.removeFromParent()
+        let finalLabel = SKLabelNode(fontNamed: "AvenirNext-Bold")
+        finalLabel.text = "Final score: \(score)"
+        finalLabel.fontColor = .white
+        finalLabel.fontSize = 30
+        finalLabel.position = CGPoint(x: 0, y: configuredSize.height / 4 - 60)
+        finalLabel.zPosition = 10
+        addChild(finalLabel)
+        finalScoreLabel = finalLabel
     }
 
     private func updateScoreLabel() {
         scoreLabel?.text = "\(score)"
         BuildConfiguration.debugAssert(scoreLabel?.parent === self, "Score label should remain attached to the scene when updated.")
+        if score > highScore {
+            highScore = score
+            updateHighScoreLabel()
+        } else {
+            BuildConfiguration.debugAssert(highScore >= score, "High score should never drop below current score.")
+        }
     }
 
     private func removeAllObstacles() {
         children.filter { $0.name == "pipe" || $0.name == "gap" }.forEach { $0.removeFromParent() }
+    }
+
+    private func stopScrollingObstacles() {
+        children.filter { $0.name == "pipe" || $0.name == "gap" }.forEach { node in
+            node.removeAllActions()
+        }
     }
 
     private func applyFlapImpulse() {
@@ -521,7 +603,7 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
     }
 
     private var isSceneReady: Bool {
-        bird != nil && bird?.physicsBody != nil && scoreLabel != nil
+        bird != nil && bird?.physicsBody != nil && scoreLabel != nil && highScoreLabel != nil
     }
 
     @discardableResult
@@ -537,8 +619,13 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
         } else {
             if bird == nil { recreateBirdIfNeeded() }
             if scoreLabel == nil { recreateScoreLabelIfNeeded() }
+            if highScoreLabel == nil { recreateHighScoreLabelIfNeeded() }
         }
 
         return isSceneReady
+    }
+
+    private func updateHighScoreLabel() {
+        highScoreLabel?.text = "HI \(highScore)"
     }
 }
