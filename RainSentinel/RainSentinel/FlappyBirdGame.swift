@@ -255,23 +255,31 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
 
     private func createWingNode(birdSize: CGSize) -> SKShapeNode {
         let wingPath = CGMutablePath()
-        wingPath.move(to: CGPoint(x: -birdSize.width * 0.12, y: 0))
+        wingPath.move(to: CGPoint(x: birdSize.width * 0.08, y: birdSize.height * 0.04))
         wingPath.addQuadCurve(
-            to: CGPoint(x: birdSize.width * 0.42, y: birdSize.height * 0.07),
-            control: CGPoint(x: birdSize.width * 0.18, y: birdSize.height * 0.42)
+            to: CGPoint(x: -birdSize.width * 0.7, y: birdSize.height * 0.2),
+            control: CGPoint(x: -birdSize.width * 0.32, y: birdSize.height * 0.48)
         )
         wingPath.addQuadCurve(
-            to: CGPoint(x: -birdSize.width * 0.12, y: 0),
-            control: CGPoint(x: birdSize.width * 0.22, y: -birdSize.height * 0.24)
+            to: CGPoint(x: -birdSize.width * 0.7, y: -birdSize.height * 0.24),
+            control: CGPoint(x: -birdSize.width * 0.95, y: -birdSize.height * 0.02)
+        )
+        wingPath.addQuadCurve(
+            to: CGPoint(x: birdSize.width * 0.08, y: -birdSize.height * 0.08),
+            control: CGPoint(x: -birdSize.width * 0.3, y: -birdSize.height * 0.46)
         )
 
         let wing = SKShapeNode(path: wingPath)
         wing.fillColor = SKColor(red: 0.99, green: 0.88, blue: 0.28, alpha: 1)
         wing.strokeColor = SKColor(red: 0.91, green: 0.6, blue: 0.05, alpha: 1)
         wing.lineWidth = 2
-        wing.position = CGPoint(x: -birdSize.width * 0.12, y: -birdSize.height * 0.04)
+        wing.position = CGPoint(x: -birdSize.width * 0.05, y: -birdSize.height * 0.06)
         wing.zPosition = 1.3
         wing.name = "wing"
+        if let wingBounds = wing.path?.boundingBoxOfPath {
+            let extendsBeyondBody = wingBounds.minX + wing.position.x < -birdSize.width / 2
+            BuildConfiguration.debugAssert(extendsBeyondBody, "Wing should extend beyond the bird body toward the rear.")
+        }
         BuildConfiguration.debugAssert(wing.zPosition >= 1, "Wing should render in front of the bird body for visibility.")
         return wing
     }
