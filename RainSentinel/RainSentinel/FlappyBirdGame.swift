@@ -266,12 +266,13 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
         )
 
         let wing = SKShapeNode(path: wingPath)
-        wing.fillColor = SKColor(red: 0.96, green: 0.76, blue: 0.12, alpha: 1)
+        wing.fillColor = SKColor(red: 0.99, green: 0.88, blue: 0.28, alpha: 1)
         wing.strokeColor = SKColor(red: 0.91, green: 0.6, blue: 0.05, alpha: 1)
-        wing.lineWidth = 2.5
-        wing.position = CGPoint(x: -birdSize.width * 0.18, y: -birdSize.height * 0.05)
-        wing.zPosition = 0.5
+        wing.lineWidth = 2
+        wing.position = CGPoint(x: -birdSize.width * 0.12, y: -birdSize.height * 0.04)
+        wing.zPosition = 1.3
         wing.name = "wing"
+        BuildConfiguration.debugAssert(wing.zPosition >= 1, "Wing should render in front of the bird body for visibility.")
         return wing
     }
 
@@ -399,10 +400,10 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
         let topPipeHeight = max(ceilingY - (verticalOffset + gapHeight / 2), minimumPipeHeight)
         let bottomPipeHeight = max((verticalOffset - gapHeight / 2) - groundTopY, minimumPipeHeight)
 
-        let topPipe = pipeNode(height: topPipeHeight, anchorY: 0, centerOffsetY: topPipeHeight / 2)
+        let topPipe = pipeNode(height: topPipeHeight, anchorY: 0, centerOffsetY: topPipeHeight / 2, orientation: .top)
         topPipe.position = CGPoint(x: configuredSize.width / 2 + pipeWidth, y: verticalOffset + gapHeight / 2)
 
-        let bottomPipe = pipeNode(height: bottomPipeHeight, anchorY: 0, centerOffsetY: bottomPipeHeight / 2)
+        let bottomPipe = pipeNode(height: bottomPipeHeight, anchorY: 0, centerOffsetY: bottomPipeHeight / 2, orientation: .bottom)
         bottomPipe.position = CGPoint(x: configuredSize.width / 2 + pipeWidth, y: groundTopY)
 
         let gapNode = SKNode()
@@ -433,7 +434,12 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
         BuildConfiguration.debugAssert(abs(bottomPipe.frame.minY - groundTopY) <= 1.0, "Bottom pipe should align with horizon.")
     }
 
-    private func pipeNode(height: CGFloat, anchorY: CGFloat, centerOffsetY: CGFloat) -> SKSpriteNode {
+    private enum PipeOrientation {
+        case top
+        case bottom
+    }
+
+    private func pipeNode(height: CGFloat, anchorY: CGFloat, centerOffsetY: CGFloat, orientation: PipeOrientation) -> SKSpriteNode {
         let pipeColor = SKColor(red: 0.37, green: 0.75, blue: 0.3, alpha: 1)
         let pipe = SKSpriteNode(color: pipeColor, size: CGSize(width: 70, height: height))
         pipe.name = "pipe"
@@ -445,21 +451,28 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
         body.contactTestBitMask = birdCategory
         body.collisionBitMask = birdCategory
         pipe.physicsBody = body
-        decoratePipe(pipe, anchorY: anchorY)
+        decoratePipe(pipe, anchorY: anchorY, orientation: orientation)
         BuildConfiguration.debugAssert(height >= 0, "Pipe height should be non-negative.")
         return pipe
     }
 
-    private func decoratePipe(_ pipe: SKSpriteNode, anchorY: CGFloat) {
+    private func decoratePipe(_ pipe: SKSpriteNode, anchorY: CGFloat, orientation: PipeOrientation) {
         let lipColor = SKColor(red: 0.30, green: 0.62, blue: 0.23, alpha: 1)
         let highlightColor = SKColor(red: 0.56, green: 0.84, blue: 0.44, alpha: 1)
 
         let lipHeight: CGFloat = 18
         let lip = SKSpriteNode(color: lipColor, size: CGSize(width: pipe.size.width + 18, height: lipHeight))
         lip.zPosition = pipe.zPosition + 1
-        lip.position = anchorY == 0
-            ? CGPoint(x: 0, y: lipHeight / 2)
-            : CGPoint(x: 0, y: -lipHeight / 2)
+        switch orientation {
+        case .top:
+            lip.position = anchorY == 0
+                ? CGPoint(x: 0, y: lipHeight / 2)
+                : CGPoint(x: 0, y: -lipHeight / 2)
+        case .bottom:
+            lip.position = anchorY == 0
+                ? CGPoint(x: 0, y: pipe.size.height - lipHeight / 2)
+                : CGPoint(x: 0, y: lipHeight / 2)
+        }
         pipe.addChild(lip)
 
         let stripeWidth: CGFloat = 12
