@@ -257,8 +257,15 @@ private struct ForecastMetadataView: View {
 private func shouldOfferRainDelay(for forecast: RainForecast) -> Bool {
     guard let upcomingPoint = forecast.upcomingRainPoint else { return false }
     let now = Date()
-    let immediateThreshold: TimeInterval = 20 * 60 // 20 minutes window for "due immediately"
-    return upcomingPoint.date <= now.addingTimeInterval(immediateThreshold)
+    let leadTime = upcomingPoint.date.timeIntervalSince(now)
+    let imminentWindow: TimeInterval = 60 * 60 // one hour window for "due soon"
+
+#if DEBUG
+    assert(leadTime > -imminentWindow,
+           "Upcoming rain point is stale by more than an hour; forecast ordering may be incorrect.")
+#endif
+
+    return leadTime <= imminentWindow
 }
 
 private struct RainDelayGameButton: View {
