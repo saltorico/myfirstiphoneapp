@@ -77,7 +77,15 @@ struct RainResult {
         if let rainPoint = forecast.upcomingRainPoint {
             isRainLikely = true
             likelyTime = rainPoint.date
-            summary = "Rain likely around \(rainPoint.date.formatted(shortTimeFormatter)) with a \(Int(rainPoint.probability.rounded()))% chance."
+            let detectionWindow = forecast.detectionWindow(for: rainPoint)
+            summary = Self.summaryText(leadIn: "Rain likely",
+                                       point: rainPoint,
+                                       probability: rainPoint.probability,
+                                       detectionWindow: detectionWindow,
+                                       lookaheadHours: forecast.lookaheadHours,
+                                       timezone: forecast.timezone,
+                                       shortTimeFormatter: shortTimeFormatter,
+                                       dayTimeFormatter: dayTimeFormatter)
             if let maxPoint = forecast.highestProbabilityPoint {
                 details = "Peak chance reaches \(Int(maxPoint.probability.rounded()))% during the forecast window."
             } else {
@@ -87,7 +95,15 @@ struct RainResult {
         } else if let moderatePoint = forecast.moderateRainPoint {
             isRainLikely = false
             likelyTime = moderatePoint.date
-            summary = "Showers possible around \(moderatePoint.date.formatted(shortTimeFormatter)) with a \(Int(moderatePoint.probability.rounded()))% chance."
+            let detectionWindow = forecast.detectionWindow(for: moderatePoint)
+            summary = Self.summaryText(leadIn: "Showers possible",
+                                       point: moderatePoint,
+                                       probability: moderatePoint.probability,
+                                       detectionWindow: detectionWindow,
+                                       lookaheadHours: forecast.lookaheadHours,
+                                       timezone: forecast.timezone,
+                                       shortTimeFormatter: shortTimeFormatter,
+                                       dayTimeFormatter: dayTimeFormatter)
             if let maxPoint = forecast.highestProbabilityPoint {
                 details = "Peak chance reaches \(Int(maxPoint.probability.rounded()))% within the next \(forecast.lookaheadHours) hours."
             } else {
@@ -147,17 +163,22 @@ struct RainResult {
                                     probability: Double,
                                     detectionWindow: RainForecast.DetectionWindow,
                                     lookaheadHours: Int,
+                                    timezone: TimeZone,
                                     shortTimeFormatter: Date.FormatStyle,
                                     dayTimeFormatter: Date.FormatStyle) -> String {
         let probabilityValue = Int(probability.rounded())
-        switch detectionWindow {
-        case .lookahead:
-            return "\(leadIn) around \(point.date.formatted(shortTimeFormatter)) with a \(probabilityValue)% chance."
-        case .next24Hours:
-            return "\(leadIn) later around \(point.date.formatted(shortTimeFormatter)) with a \(probabilityValue)% chance (outside the next \(lookaheadHours) hours)."
-        case .extended:
-            return "\(leadIn) on \(point.date.formatted(dayTimeFormatter)) with a \(probabilityValue)% chance."
+        let timePhrase = timePhrase(for: point.date,
+                                    timezone: timezone,
+                                    shortTimeFormatter: shortTimeFormatter,
+                                    dayTimeFormatter: dayTimeFormatter)
+
+        var summary = "\(leadIn) \(timePhrase) with a \(probabilityValue)% chance"
+
+        if detectionWindow == .next24Hours {
+            summary += " (outside the next \(lookaheadHours) hours)"
         }
+
+        return summary + "."
     }
 
     private static func detailText(for forecast: RainForecast,
@@ -165,10 +186,38 @@ struct RainResult {
                                    dayTimeFormatter: Date.FormatStyle) -> String? {
         guard let maxPoint = forecast.highestProbabilityPoint else { return nil }
         let detectionWindow = forecast.detectionWindow(for: maxPoint)
-        let formatter = detectionWindow == .extended ? dayTimeFormatter : shortTimeFormatter
-        let prefix = detectionWindow == .extended ? "on" : "around"
         let windowDescription = windowDescription(for: detectionWindow, lookaheadHours: forecast.lookaheadHours)
-        return "Peak chance reaches \(Int(maxPoint.probability.rounded()))% \(prefix) \(maxPoint.date.formatted(formatter)) \(windowDescription)."
+        let timePhrase = timePhrase(for: maxPoint.date,
+                                    timezone: forecast.timezone,
+                                    shortTimeFormatter: shortTimeFormatter,
+                                    dayTimeFormatter: dayTimeFormatter)
+        return "Peak chance reaches \(Int(maxPoint.probability.rounded()))% \(timePhrase) \(windowDescription)."
+    }
+
+    private static func timePhrase(for date: Date,
+                                   timezone: TimeZone,
+                                   shortTimeFormatter: Date.FormatStyle,
+                                   dayTimeFormatter: Date.FormatStyle) -> String {
+        var calendar = Calendar.current
+        calendar.timeZone = timezone
+
+        let referenceDate = Date()
+        let startOfReference = calendar.startOfDay(for: referenceDate)
+        let startOfTarget = calendar.startOfDay(for: date)
+        let dayOffset = calendar.dateComponents([.day], from: startOfReference, to: startOfTarget).day ?? 0
+
+        switch dayOffset {
+        case ..<(-1):
+            return "on \(date.formatted(dayTimeFormatter))"
+        case -1:
+            return "yesterday around \(date.formatted(shortTimeFormatter))"
+        case 0:
+            return "around \(date.formatted(shortTimeFormatter))"
+        case 1:
+            return "tomorrow around \(date.formatted(shortTimeFormatter))"
+        default:
+            return "on \(date.formatted(dayTimeFormatter))"
+        }
     }
 
     private static func windowDescription(for detectionWindow: RainForecast.DetectionWindow,
