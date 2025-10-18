@@ -19,3 +19,4 @@
 - _[2025-10-18]_ Corrected Open-Meteo timezone selection and strengthened forecast window debug assertions to keep lookahead and next 24-hour tables aligned.
 - _[2025-02-14]_ Adjusted summary phrasing to call out when forecasted rain falls on the next day so "tomorrow" timing is explicit.
 - _[2025-02-15]_ Removed debug-only forecast tables/raw JSON, introduced flappy bird easter egg gate keyed to imminent rain, and added SpriteKit scene for gameplay.
+- _[2025-02-16]_ Expanded imminent rain window to 60 minutes so the rain-delay mini game appears when next-hour rain is detected and added a debug assertion for stale forecasts.
