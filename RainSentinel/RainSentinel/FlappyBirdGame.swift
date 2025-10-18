@@ -59,8 +59,8 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
     private let scoreCategory: UInt32 = 0x1 << 2
     private let groundCategory: UInt32 = 0x1 << 3
 
-    private var bird: SKSpriteNode!
-    private var scoreLabel: SKLabelNode!
+    private var bird: SKSpriteNode?
+    private var scoreLabel: SKLabelNode?
     private var stateLabel: SKLabelNode?
     private var gameState: GameState = .menu
     private var score = 0
@@ -86,16 +86,19 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
             setupScene()
         } else {
             repositionLayout()
+            BuildConfiguration.debugAssert(isSceneReady, "Scene expected core nodes after layout change but found them missing.")
         }
     }
 
     func startIfNeeded() {
         if gameState == .menu {
+            ensureSceneReady()
             showMenu()
         }
     }
 
     func resetToMenu() {
+        ensureSceneReady()
         removeAction(forKey: spawnActionKey)
         removeAllObstacles()
         score = 0
@@ -115,6 +118,7 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
             setupScene()
         }
         showMenu()
+        BuildConfiguration.debugAssert(isSceneReady, "Scene failed to configure bird and score label after didMove invocation.")
     }
 
     private func setupScene() {
@@ -123,8 +127,9 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
         }
         anchorPoint = CGPoint(x: 0.5, y: 0.5)
         createGround()
-        createBird()
-        createScoreLabel()
+        recreateBirdIfNeeded()
+        recreateScoreLabelIfNeeded()
+        BuildConfiguration.debugAssert(isSceneReady, "Setup scene finished without required nodes.")
     }
 
     private func createGround() {
@@ -155,26 +160,31 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
         if gameState != .playing {
             bird?.position = startingBirdPosition()
         }
+        BuildConfiguration.debugAssert(isSceneReady, "Reposition layout expected configured nodes for state \(gameState).")
     }
 
-    private func createBird() {
+    private func recreateBirdIfNeeded() {
+        if let existingBird = bird {
+            existingBird.removeAllActions()
+            existingBird.removeFromParent()
+        }
         let birdSize = CGSize(width: 48, height: 36)
-        bird = SKSpriteNode(color: .clear, size: birdSize)
-        bird.position = startingBirdPosition()
-        bird.physicsBody = SKPhysicsBody(circleOfRadius: birdSize.height / 2.2)
-        bird.physicsBody?.categoryBitMask = birdCategory
-        bird.physicsBody?.contactTestBitMask = obstacleCategory | scoreCategory | groundCategory
-        bird.physicsBody?.collisionBitMask = obstacleCategory | groundCategory
-        bird.physicsBody?.allowsRotation = false
-        bird.physicsBody?.isDynamic = false
-        bird.physicsBody?.restitution = 0
-        addChild(bird)
+        let newBird = SKSpriteNode(color: .clear, size: birdSize)
+        newBird.position = startingBirdPosition()
+        newBird.physicsBody = SKPhysicsBody(circleOfRadius: birdSize.height / 2.2)
+        newBird.physicsBody?.categoryBitMask = birdCategory
+        newBird.physicsBody?.contactTestBitMask = obstacleCategory | scoreCategory | groundCategory
+        newBird.physicsBody?.collisionBitMask = obstacleCategory | groundCategory
+        newBird.physicsBody?.allowsRotation = false
+        newBird.physicsBody?.isDynamic = false
+        newBird.physicsBody?.restitution = 0
+        addChild(newBird)
 
         let bodyShape = SKShapeNode(ellipseOf: birdSize)
         bodyShape.fillColor = SKColor(red: 0.97, green: 0.83, blue: 0.18, alpha: 1)
         bodyShape.strokeColor = .clear
         bodyShape.zPosition = 1
-        bird.addChild(bodyShape)
+        newBird.addChild(bodyShape)
 
         let eye = SKShapeNode(circleOfRadius: 5)
         eye.fillColor = .white
@@ -187,9 +197,9 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
         pupil.position = CGPoint(x: 1, y: -1)
         eye.addChild(pupil)
         addChild(eye)
-        eye.zPosition = bird.zPosition + 1
+        eye.zPosition = newBird.zPosition + 1
         eye.removeFromParent()
-        bird.addChild(eye)
+        newBird.addChild(eye)
 
         let beak = SKShapeNode(path: {
             let rect = CGRect(x: 0, y: -4, width: 14, height: 8)
@@ -203,21 +213,25 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
         beak.fillColor = SKColor(red: 1.0, green: 0.57, blue: 0.0, alpha: 1)
         beak.strokeColor = .clear
         beak.position = CGPoint(x: birdSize.width / 2.5, y: 0)
-        bird.addChild(beak)
+        newBird.addChild(beak)
+        bird = newBird
+        BuildConfiguration.debugAssert(newBird.physicsBody != nil, "Bird should have physics configured after recreation.")
     }
 
     private func startingBirdPosition() -> CGPoint {
         CGPoint(x: -configuredSize.width * 0.2, y: 0)
     }
 
-    private func createScoreLabel() {
-        scoreLabel = SKLabelNode(fontNamed: "AvenirNext-Bold")
-        scoreLabel.fontSize = 36
-        scoreLabel.fontColor = .white
-        scoreLabel.position = CGPoint(x: 0, y: configuredSize.height / 2 - 80)
-        scoreLabel.text = "0"
-        scoreLabel.zPosition = 10
-        addChild(scoreLabel)
+    private func recreateScoreLabelIfNeeded() {
+        scoreLabel?.removeFromParent()
+        let label = SKLabelNode(fontNamed: "AvenirNext-Bold")
+        label.fontSize = 36
+        label.fontColor = .white
+        label.position = CGPoint(x: 0, y: configuredSize.height / 2 - 80)
+        label.text = "0"
+        label.zPosition = 10
+        addChild(label)
+        scoreLabel = label
     }
 
     private func showMenu() {
@@ -230,17 +244,20 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
         label.zPosition = 10
         addChild(label)
         stateLabel = label
+        BuildConfiguration.debugAssert(isSceneReady, "Menu presented without core nodes configured.")
     }
 
     private func startGame() {
+        guard ensureSceneReady() else { return }
         stateLabel?.removeFromParent()
         score = 0
         updateScoreLabel()
-        bird.physicsBody?.isDynamic = true
-        bird.physicsBody?.velocity = .zero
-        bird.physicsBody?.applyImpulse(CGVector(dx: 0, dy: 260))
+        bird?.physicsBody?.isDynamic = true
+        bird?.physicsBody?.velocity = .zero
+        bird?.physicsBody?.applyImpulse(CGVector(dx: 0, dy: 260))
         gameState = .playing
         spawnPipes()
+        BuildConfiguration.debugAssert(gameState == .playing, "Game state should be playing after startGame.")
     }
 
     private func spawnPipes() {
@@ -254,6 +271,8 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
 
     private func createPipePair() {
         guard gameState == .playing else { return }
+        BuildConfiguration.debugAssert(isSceneReady, "Pipe spawn attempted while scene not ready.")
+        BuildConfiguration.debugAssert(configuredSize != .zero, "Configured size should be known when spawning pipes.")
         let pipeWidth: CGFloat = 70
         let gapHeight = max(configuredSize.height * 0.28, 160)
         let maxOffset = max(configuredSize.height * 0.25, 100)
@@ -310,12 +329,13 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard ensureSceneReady() else { return }
         switch gameState {
         case .menu:
             startGame()
         case .playing:
-            bird.physicsBody?.velocity = CGVector(dx: 0, dy: 0)
-            bird.physicsBody?.applyImpulse(CGVector(dx: 0, dy: 260))
+            bird?.physicsBody?.velocity = CGVector(dx: 0, dy: 0)
+            bird?.physicsBody?.applyImpulse(CGVector(dx: 0, dy: 260))
         case .gameOver:
             resetToMenu()
         }
@@ -344,9 +364,10 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
 
     private func handleCrash() {
         guard gameState == .playing else { return }
+        BuildConfiguration.debugAssert(isSceneReady, "Crash handling expected active scene nodes.")
         gameState = .gameOver
         removeAction(forKey: spawnActionKey)
-        bird.physicsBody?.collisionBitMask = groundCategory | obstacleCategory
+        bird?.physicsBody?.collisionBitMask = groundCategory | obstacleCategory
         let label = SKLabelNode(fontNamed: "AvenirNext-DemiBold")
         label.text = "Game over • Tap to retry"
         label.fontColor = .white
@@ -359,9 +380,32 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
 
     private func updateScoreLabel() {
         scoreLabel?.text = "\(score)"
+        BuildConfiguration.debugAssert(scoreLabel?.parent === self, "Score label should remain attached to the scene when updated.")
     }
 
     private func removeAllObstacles() {
         children.filter { $0.name == "pipe" || $0.name == "gap" }.forEach { $0.removeFromParent() }
+    }
+
+    private var isSceneReady: Bool {
+        bird != nil && bird?.physicsBody != nil && scoreLabel != nil
+    }
+
+    @discardableResult
+    private func ensureSceneReady() -> Bool {
+        if isSceneReady {
+            return true
+        }
+
+        BuildConfiguration.debugAssert(false, "FlappyBirdScene interaction occurred before nodes were configured. configuredSize=\(configuredSize)")
+
+        if children.isEmpty {
+            setupScene()
+        } else {
+            if bird == nil { recreateBirdIfNeeded() }
+            if scoreLabel == nil { recreateScoreLabelIfNeeded() }
+        }
+
+        return isSceneReady
     }
 }

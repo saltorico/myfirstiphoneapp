@@ -17,6 +17,7 @@ objects = {
 4B6E55992C3E47E5006F51D7 /* CheckFrequency.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B6E55992C3E47E5006F51C8 /* CheckFrequency.swift */; };
 4B6E55992C3E47E5006F51D8 /* RainLookahead.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B6E55992C3E47E5006F51C9 /* RainLookahead.swift */; };
 4B6E55AA2C3E47E5006F51DA /* FlappyBirdGame.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B6E55AA2C3E47E5006F51D9 /* FlappyBirdGame.swift */; };
+4B6E55BB2C3E47E5006F51DB /* BuildConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B6E55BB2C3E47E5006F51DC /* BuildConfiguration.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -32,6 +33,7 @@ objects = {
 4B6E55992C3E47E5006F51C8 /* CheckFrequency.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckFrequency.swift; sourceTree = "<group>"; };
 4B6E55992C3E47E5006F51C9 /* RainLookahead.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RainLookahead.swift; sourceTree = "<group>"; };
 4B6E55AA2C3E47E5006F51D9 /* FlappyBirdGame.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlappyBirdGame.swift; sourceTree = "<group>"; };
+4B6E55BB2C3E47E5006F51DC /* BuildConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildConfiguration.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -58,6 +60,7 @@ runOnlyForDeploymentPostprocessing = 0; };
 4B6E55992C3E47E5006F51C8 /* CheckFrequency.swift */,
 4B6E55992C3E47E5006F51C9 /* RainLookahead.swift */,
 4B6E55AA2C3E47E5006F51D9 /* FlappyBirdGame.swift */,
+4B6E55BB2C3E47E5006F51DC /* BuildConfiguration.swift */,
 4B6E55992C3E47E5006F51C6 /* Preview Assets.xcassets */,
 4B6E55992C3E47E5006F51C7 /* Info.plist */,
 ); path = RainSentinel; sourceTree = "<group>"; };
@@ -119,6 +122,7 @@ targets = (
 4B6E55992C3E47E5006F51D8 /* RainLookahead.swift in Sources */,
 4B6E55992C3E47E5006F51D4 /* NotificationManager.swift in Sources */,
 4B6E55AA2C3E47E5006F51DA /* FlappyBirdGame.swift in Sources */,
+4B6E55BB2C3E47E5006F51DB /* BuildConfiguration.swift in Sources */,
 ); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
