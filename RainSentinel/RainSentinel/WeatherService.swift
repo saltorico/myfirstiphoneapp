@@ -104,6 +104,24 @@ struct RainResult {
                 details = nil
             }
             iconName = "sun.max"
+
+#if DEBUG
+            let pointCount = forecast.allPoints.count
+            if forecast.lookaheadHours >= 24 {
+                assert(pointCount == 24 || pointCount == 48,
+                       "No-rain conclusion drawn without expected 24/48 data points (actual: \(pointCount))")
+            }
+
+            let timezones = forecast.allPoints.map { forecast.timezone.secondsFromGMT(for: $0.date) }
+            if let firstOffset = timezones.first {
+                assert(timezones.allSatisfy { abs($0 - firstOffset) <= 3600 },
+                       "Timezone offsets vary unexpectedly across forecast points")
+            }
+
+            let nonZeroPoints = forecast.allPoints.filter { $0.probability > 0 || $0.rainfallAmount > 0 }
+            assert(nonZeroPoints.isEmpty,
+                   "No-rain conclusion contradicted by \(nonZeroPoints.count) data points with precipitation signals")
+#endif
         }
     }
 
@@ -196,6 +214,16 @@ final class WeatherService {
         let rainAmounts = decoded.hourly.rain ?? Array(repeating: 0, count: timeStrings.count)
         let count = min(timeStrings.count, probabilities.count, rainAmounts.count)
 
+#if DEBUG
+        debugValidate(decoded: decoded,
+                       timeStrings: timeStrings,
+                       probabilities: probabilities,
+                       rainAmounts: rainAmounts,
+                       count: count,
+                       lookahead: lookahead,
+                       timezone: timezone)
+#endif
+
         let allPoints: [RainForecast.DataPoint] = (0..<count).compactMap { index in
             let time = timeStrings[index]
             guard let date = ISO8601DateFormatter.openMeteo.date(from: time) else { return nil }
@@ -254,6 +282,47 @@ final class WeatherService {
         return url
     }
 }
+
+#if DEBUG
+extension WeatherService {
+    private func debugValidate(decoded: OpenMeteoResponse,
+                               timeStrings: [String],
+                               probabilities: [Double],
+                               rainAmounts: [Double],
+                               count: Int,
+                               lookahead: RainLookahead,
+                               timezone: TimeZone) {
+        assert(!timeStrings.isEmpty, "Expected hourly time stamps from weather service response")
+
+        if let probabilityCount = decoded.hourly.precipitationProbability?.count {
+            assert(probabilityCount == timeStrings.count,
+                   "Mismatched precipitation probability count (\(probabilityCount)) for timestamps (\(timeStrings.count))")
+        }
+
+        if let rainCount = decoded.hourly.rain?.count {
+            assert(rainCount == timeStrings.count,
+                   "Mismatched rain amount count (\(rainCount)) for timestamps (\(timeStrings.count))")
+        }
+
+        let minimumExpectedPoints = min(timeStrings.count, max(lookahead.rawValue, 1))
+        assert(count >= minimumExpectedPoints,
+               "Unexpected truncation while preparing rain data points (have: \(count), expected at least: \(minimumExpectedPoints))")
+
+        let referenceDate = Date()
+        let timezoneOffset = timezone.secondsFromGMT(for: referenceDate)
+        let offsetDifference = abs(timezoneOffset - decoded.utcOffsetSeconds)
+        assert(offsetDifference <= 3600,
+               "Timezone offset mismatch detected (service: \(decoded.utcOffsetSeconds), system: \(timezoneOffset))")
+
+        let lookaheadHorizon = referenceDate.addingTimeInterval(TimeInterval(lookahead.rawValue * 3600))
+        if let firstTime = timeStrings.first,
+           let firstDate = ISO8601DateFormatter.openMeteo.date(from: firstTime) {
+            assert(firstDate <= lookaheadHorizon.addingTimeInterval(48 * 3600),
+                   "First data point is unexpectedly far in the future: \(firstDate)")
+        }
+    }
+}
+#endif
 
 private struct OpenMeteoResponse: Decodable {
     let timezone: String
