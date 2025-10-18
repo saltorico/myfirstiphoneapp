@@ -208,7 +208,9 @@ final class WeatherService {
 
         let decoded = try decoder.decode(OpenMeteoResponse.self, from: data)
         let rawJSON = String(data: data, encoding: .utf8)
-        let timezone = TimeZone.current
+        let timezone = TimeZone(identifier: decoded.timezone)
+            ?? TimeZone(secondsFromGMT: decoded.utcOffsetSeconds)
+            ?? TimeZone.current
 
         let timeStrings = decoded.hourly.time
         let probabilities = decoded.hourly.precipitationProbability ?? Array(repeating: 0, count: timeStrings.count)
@@ -243,6 +245,15 @@ final class WeatherService {
         if allPoints.count != count {
             assertionFailure("Parsed only \(allPoints.count) of \(count) hourly timestamps – forecast integrity compromised.")
         }
+
+        if let timezoneIdentifier = TimeZone(identifier: decoded.timezone) {
+            assert(timezoneIdentifier == timezone,
+                   "Resolved timezone differs from response identifier – using fallback unexpectedly.")
+        }
+
+        if let first = allPoints.first?.date, let last = allPoints.last?.date {
+            assert(first <= last, "Hourly data is not chronologically ordered (first: \(first), last: \(last)).")
+        }
 #endif
 
         let now = Date()
@@ -269,6 +280,24 @@ final class WeatherService {
         } else {
             next24Points = Array(next24Candidates.prefix(24))
         }
+
+#if DEBUG
+        assert(next24Points.count <= 24, "Next 24 hour window produced \(next24Points.count) entries; expected at most 24.")
+
+        if lookahead.rawValue >= 24 {
+            let lookaheadLimit = now.addingTimeInterval(TimeInterval(lookahead.rawValue * 3600))
+            if let lastPoint = consideredPoints.last {
+                assert(lastPoint.date <= lookaheadLimit,
+                       "Lookahead window extends beyond \(lookahead.rawValue) hours (last point: \(lastPoint.date)).")
+            }
+        }
+
+        if let lastNext24 = next24Points.last {
+            let next24Limit = now.addingTimeInterval(24 * 3600)
+            assert(lastNext24.date <= next24Limit,
+                   "Next 24 hour table extends past 24 hour horizon (last point: \(lastNext24.date)).")
+        }
+#endif
 
         return RainForecast(points: consideredPoints,
                              next24HourPoints: next24Points,
