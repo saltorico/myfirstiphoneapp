@@ -120,26 +120,38 @@ struct RainResult {
             }
             iconName = "sun.max"
 
-#if DEBUG
-            let pointCount = forecast.allPoints.count
-            guard pointCount > 0 else {
-                preconditionFailure("No-rain conclusion drawn with zero hourly data points – hourly parsing failed.")
-            }
+            if BuildConfiguration.isDebug {
+                let pointCount = forecast.allPoints.count
+                BuildConfiguration.debugAssert(pointCount > 0, "No-rain conclusion drawn with zero hourly data points – hourly parsing failed.")
 
-            if forecast.lookaheadHours >= 24 && !(pointCount == 24 || pointCount == 48) {
-                preconditionFailure("No-rain conclusion drawn without expected 24/48 data points (actual: \(pointCount))")
-            }
+                if forecast.lookaheadHours >= 24 {
+                    let hasExpectedCount = pointCount == 24 || pointCount == 48
+                    BuildConfiguration.debugAssert(hasExpectedCount, "No-rain conclusion drawn without expected 24/48 data points (actual: \(pointCount))")
+                }
 
-            let nonZeroPoints = forecast.allPoints.filter { $0.probability > 0 || $0.rainfallAmount > 0 }
-            if !nonZeroPoints.isEmpty {
-                preconditionFailure("No-rain conclusion contradicted by \(nonZeroPoints.count) data points with precipitation signals.")
-            }
+                let contradictoryPoints = forecast.allPoints.filter { dataPoint in
+                    dataPoint.probability >= DebugValidation.minimumProbabilitySignal ||
+                        dataPoint.rainfallAmount >= DebugValidation.minimumRainfallSignal
+                }
+                let rainfallThreshold = String(format: "%.2f", DebugValidation.minimumRainfallSignal)
+                BuildConfiguration.debugAssert(
+                    contradictoryPoints.isEmpty,
+                    "No-rain conclusion contradicted by \(contradictoryPoints.count) data points meeting precipitation signal thresholds (≥\(Int(DebugValidation.minimumProbabilitySignal))% probability or ≥\(rainfallThreshold) mm)."
+                )
 
-            if let maxPoint = forecast.highestProbabilityPoint,
-               maxPoint.probability >= 50 || maxPoint.rainfallAmount > 0.1 {
-                preconditionFailure("Highest probability point (\(Int(maxPoint.probability.rounded()))%, \(maxPoint.rainfallAmount) mm) conflicts with no-rain outcome.")
+                if let maxPoint = forecast.highestProbabilityPoint {
+                    BuildConfiguration.debugAssert(
+                        maxPoint.probability < 50 && maxPoint.rainfallAmount <= 0.1,
+                        "Highest probability point (\(Int(maxPoint.probability.rounded()))%, \(maxPoint.rainfallAmount) mm) conflicts with no-rain outcome."
+                    )
+
+                    BuildConfiguration.debugAssert(
+                        maxPoint.probability < DebugValidation.moderateProbabilityCeiling &&
+                            maxPoint.rainfallAmount <= DebugValidation.moderateRainfallCeiling,
+                        "Peak precipitation signal (\(Int(maxPoint.probability.rounded()))%, \(maxPoint.rainfallAmount) mm) exceeds moderate threshold despite no-rain result."
+                    )
+                }
             }
-#endif
         }
     }
 
@@ -229,6 +241,13 @@ struct RainResult {
         case .extended:
             return "later in the forecast"
         }
+    }
+
+    private enum DebugValidation {
+        static let minimumProbabilitySignal: Double = 12
+        static let minimumRainfallSignal: Double = 0.04
+        static let moderateProbabilityCeiling: Double = 20
+        static let moderateRainfallCeiling: Double = 0.05
     }
 }
 

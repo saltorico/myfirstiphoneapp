@@ -26,3 +26,4 @@
 - _[2025-02-18]_ Anchored pipe bases to the ground node, widened wing geometry to extend beyond the bird body, and added high score/final score overlays plus debug-gated assertions for horizon alignment and game-over flow.
 - _[2025-02-18]_ Mirrored bottom pipe lip placement toward the gap, boosted wing layering/contrast for visibility, and added a debug assertion to keep the wing rendering ahead of the body.
 - _[2025-02-19]_ Expanded wing path to extend past the body toward the rear, mirrored its orientation, and asserted the new geometry stays outside the bird ellipse.
+- _[2025-02-20]_ Trimmed Rain Delay Bird wing span to roughly half-width and relaxed no-rain debug validations to ignore insignificant precipitation noise while keeping assertions behind the debug helper.
