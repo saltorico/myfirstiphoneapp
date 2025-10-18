@@ -54,6 +54,14 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
         case gameOver
     }
 
+    private enum PhysicsTuning {
+        static let gravity = CGVector(dx: 0, dy: -18.0)
+        static let flapImpulse = CGVector(dx: 0, dy: 215)
+        static let maxDownwardVelocity: CGFloat = -520
+        static let maxUpwardVelocity: CGFloat = 480
+        static let pipeTravelSpeed: CGFloat = 160
+    }
+
     private let birdCategory: UInt32 = 0x1 << 0
     private let obstacleCategory: UInt32 = 0x1 << 1
     private let scoreCategory: UInt32 = 0x1 << 2
@@ -112,7 +120,7 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
     }
 
     override func didMove(to view: SKView) {
-        physicsWorld.gravity = CGVector(dx: 0, dy: -9.8)
+        physicsWorld.gravity = PhysicsTuning.gravity
         physicsWorld.contactDelegate = self
         if children.isEmpty {
             setupScene()
@@ -175,9 +183,13 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
         newBird.physicsBody?.categoryBitMask = birdCategory
         newBird.physicsBody?.contactTestBitMask = obstacleCategory | scoreCategory | groundCategory
         newBird.physicsBody?.collisionBitMask = obstacleCategory | groundCategory
-        newBird.physicsBody?.allowsRotation = false
+        newBird.physicsBody?.allowsRotation = true
         newBird.physicsBody?.isDynamic = false
         newBird.physicsBody?.restitution = 0
+        newBird.physicsBody?.friction = 0
+        newBird.physicsBody?.linearDamping = 0.05
+        newBird.physicsBody?.angularDamping = 0.8
+        newBird.physicsBody?.usesPreciseCollisionDetection = true
         addChild(newBird)
 
         let bodyShape = SKShapeNode(ellipseOf: birdSize)
@@ -214,8 +226,56 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
         beak.strokeColor = .clear
         beak.position = CGPoint(x: birdSize.width / 2.5, y: 0)
         newBird.addChild(beak)
+
+        let wing = createWingNode(birdSize: birdSize)
+        newBird.addChild(wing)
+
+        let tail = createTailNode(birdSize: birdSize)
+        newBird.addChild(tail)
+
+        startWingAnimation(on: wing)
         bird = newBird
         BuildConfiguration.debugAssert(newBird.physicsBody != nil, "Bird should have physics configured after recreation.")
+    }
+
+    private func createWingNode(birdSize: CGSize) -> SKShapeNode {
+        let wingPath = CGMutablePath()
+        wingPath.move(to: CGPoint(x: -birdSize.width * 0.1, y: 0))
+        wingPath.addQuadCurve(to: CGPoint(x: birdSize.width * 0.25, y: birdSize.height * 0.05), control: CGPoint(x: birdSize.width * 0.05, y: birdSize.height * 0.38))
+        wingPath.addQuadCurve(to: CGPoint(x: -birdSize.width * 0.1, y: 0), control: CGPoint(x: birdSize.width * 0.15, y: -birdSize.height * 0.2))
+
+        let wing = SKShapeNode(path: wingPath)
+        wing.fillColor = SKColor(red: 0.96, green: 0.76, blue: 0.12, alpha: 1)
+        wing.strokeColor = SKColor(red: 0.91, green: 0.6, blue: 0.05, alpha: 1)
+        wing.lineWidth = 2
+        wing.position = CGPoint(x: -birdSize.width * 0.15, y: -birdSize.height * 0.05)
+        wing.zPosition = 0.5
+        wing.name = "wing"
+        return wing
+    }
+
+    private func createTailNode(birdSize: CGSize) -> SKShapeNode {
+        let tailPath = CGMutablePath()
+        tailPath.move(to: CGPoint(x: -birdSize.width / 2.2, y: -birdSize.height * 0.15))
+        tailPath.addLine(to: CGPoint(x: -birdSize.width / 2.8, y: 0))
+        tailPath.addLine(to: CGPoint(x: -birdSize.width / 2.2, y: birdSize.height * 0.18))
+        tailPath.closeSubpath()
+
+        let tail = SKShapeNode(path: tailPath)
+        tail.fillColor = SKColor(red: 0.97, green: 0.83, blue: 0.18, alpha: 1)
+        tail.strokeColor = SKColor(red: 0.91, green: 0.6, blue: 0.05, alpha: 1)
+        tail.lineWidth = 2
+        tail.zPosition = 0.4
+        tail.name = "tail"
+        return tail
+    }
+
+    private func startWingAnimation(on wing: SKNode) {
+        let flapUp = SKAction.rotate(toAngle: .pi / 7, duration: 0.12, shortestUnitArc: true)
+        let flapDown = SKAction.rotate(toAngle: -.pi / 6, duration: 0.12, shortestUnitArc: true)
+        let pause = SKAction.wait(forDuration: 0.02)
+        let sequence = SKAction.sequence([flapUp, pause, flapDown, pause])
+        wing.run(SKAction.repeatForever(sequence), withKey: "flap")
     }
 
     private func startingBirdPosition() -> CGPoint {
@@ -244,6 +304,7 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
         label.zPosition = 10
         addChild(label)
         stateLabel = label
+        resumeWingAnimationIfNeeded()
         BuildConfiguration.debugAssert(isSceneReady, "Menu presented without core nodes configured.")
     }
 
@@ -254,7 +315,9 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
         updateScoreLabel()
         bird?.physicsBody?.isDynamic = true
         bird?.physicsBody?.velocity = .zero
-        bird?.physicsBody?.applyImpulse(CGVector(dx: 0, dy: 260))
+        bird?.zRotation = 0
+        applyFlapImpulse()
+        resumeWingAnimationIfNeeded()
         gameState = .playing
         spawnPipes()
         BuildConfiguration.debugAssert(gameState == .playing, "Game state should be playing after startGame.")
@@ -296,9 +359,10 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
         gapNode.physicsBody?.categoryBitMask = scoreCategory
         gapNode.physicsBody?.contactTestBitMask = birdCategory
         gapNode.physicsBody?.collisionBitMask = 0
+        gapNode.physicsBody?.usesPreciseCollisionDetection = true
 
         let distance = configuredSize.width + pipeWidth * 2
-        let rawDuration = TimeInterval(distance / 160)
+        let rawDuration = TimeInterval(distance / PhysicsTuning.pipeTravelSpeed)
         let duration = min(max(rawDuration, 1.6), 3.4)
         let move = SKAction.moveBy(x: -distance, y: 0, duration: duration)
         let remove = SKAction.removeFromParent()
@@ -325,7 +389,36 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
         body.contactTestBitMask = birdCategory
         body.collisionBitMask = birdCategory
         pipe.physicsBody = body
+        decoratePipe(pipe, anchorY: anchorY)
         return pipe
+    }
+
+    private func decoratePipe(_ pipe: SKSpriteNode, anchorY: CGFloat) {
+        let lipColor = SKColor(red: 0.30, green: 0.62, blue: 0.23, alpha: 1)
+        let highlightColor = SKColor(red: 0.56, green: 0.84, blue: 0.44, alpha: 1)
+
+        let lipHeight: CGFloat = 18
+        let lip = SKSpriteNode(color: lipColor, size: CGSize(width: pipe.size.width + 18, height: lipHeight))
+        lip.zPosition = pipe.zPosition + 1
+        lip.position = anchorY == 0
+            ? CGPoint(x: 0, y: lipHeight / 2)
+            : CGPoint(x: 0, y: -lipHeight / 2)
+        pipe.addChild(lip)
+
+        let stripeWidth: CGFloat = 12
+        let stripe = SKSpriteNode(color: highlightColor, size: CGSize(width: stripeWidth, height: pipe.size.height))
+        stripe.anchorPoint = CGPoint(x: 0, y: anchorY)
+        stripe.position = CGPoint(x: pipe.size.width / 4, y: 0)
+        stripe.alpha = 0.55
+        stripe.zPosition = pipe.zPosition + 0.5
+        pipe.addChild(stripe)
+
+        let shadow = SKSpriteNode(color: lipColor.withAlphaComponent(0.7), size: CGSize(width: stripeWidth, height: pipe.size.height))
+        shadow.anchorPoint = CGPoint(x: 1, y: anchorY)
+        shadow.position = CGPoint(x: -pipe.size.width / 2.5, y: 0)
+        shadow.alpha = 0.45
+        shadow.zPosition = pipe.zPosition + 0.4
+        pipe.addChild(shadow)
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
@@ -334,8 +427,7 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
         case .menu:
             startGame()
         case .playing:
-            bird?.physicsBody?.velocity = CGVector(dx: 0, dy: 0)
-            bird?.physicsBody?.applyImpulse(CGVector(dx: 0, dy: 260))
+            applyFlapImpulse()
         case .gameOver:
             resetToMenu()
         }
@@ -354,6 +446,7 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
         guard gameState == .playing else { return }
         score += 1
         updateScoreLabel()
+        BuildConfiguration.debugAssert(score > 0, "Score should stay positive after clearing a gate.")
         if contact.bodyA.categoryBitMask == scoreCategory {
             contact.bodyA.node?.removeFromParent()
         }
@@ -368,6 +461,7 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
         gameState = .gameOver
         removeAction(forKey: spawnActionKey)
         bird?.physicsBody?.collisionBitMask = groundCategory | obstacleCategory
+        bird?.childNode(withName: "wing")?.removeAction(forKey: "flap")
         let label = SKLabelNode(fontNamed: "AvenirNext-DemiBold")
         label.text = "Game over • Tap to retry"
         label.fontColor = .white
@@ -385,6 +479,45 @@ final class FlappyBirdScene: SKScene, SKPhysicsContactDelegate {
 
     private func removeAllObstacles() {
         children.filter { $0.name == "pipe" || $0.name == "gap" }.forEach { $0.removeFromParent() }
+    }
+
+    private func applyFlapImpulse() {
+        guard let physicsBody = bird?.physicsBody else { return }
+        var newVelocity = physicsBody.velocity
+        newVelocity.dy = max(newVelocity.dy, 0)
+        newVelocity.dy = min(newVelocity.dy, PhysicsTuning.maxUpwardVelocity)
+        physicsBody.velocity = newVelocity
+        physicsBody.applyImpulse(PhysicsTuning.flapImpulse)
+        if physicsBody.velocity.dy > PhysicsTuning.maxUpwardVelocity {
+            physicsBody.velocity.dy = PhysicsTuning.maxUpwardVelocity
+        }
+        if let wing = bird?.childNode(withName: "wing"), wing.action(forKey: "flap") == nil {
+            startWingAnimation(on: wing)
+        }
+    }
+
+    private func resumeWingAnimationIfNeeded() {
+        guard let wing = bird?.childNode(withName: "wing") else { return }
+        if wing.action(forKey: "flap") == nil {
+            startWingAnimation(on: wing)
+        }
+    }
+
+    override func update(_ currentTime: TimeInterval) {
+        guard gameState == .playing else { return }
+        guard let bird = bird, let physicsBody = bird.physicsBody else { return }
+
+        if physicsBody.velocity.dy < PhysicsTuning.maxDownwardVelocity {
+            physicsBody.velocity.dy = PhysicsTuning.maxDownwardVelocity
+        }
+
+        let normalizedTilt = max(min(physicsBody.velocity.dy / 600.0, 0.45), -0.65)
+        bird.zRotation = normalizedTilt
+
+        let verticalLimit = configuredSize.height / 2
+        if bird.position.y > verticalLimit || bird.position.y < -verticalLimit {
+            handleCrash()
+        }
     }
 
     private var isSceneReady: Bool {
